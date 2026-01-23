@@ -6,8 +6,15 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
+  DialogHeader,
   DialogTitle,
+  DialogClose,
 } from "@/components/ui/dialog";
+import { X } from "lucide-react";
+
+// UX_RATIONALE:
+// - consistency: 他のモーダル（Settings, Export, PWA, Help）と構造・デザインを統一し、学習コストを下げる。
+// - visual_hierarchy: Neo-Brutalismスタイル（太枠、影なし）を適用し、アプリ全体の一貫性を保つ。
 
 interface ManusDialogProps {
   title?: string;
@@ -51,34 +58,41 @@ export function ManusDialog({
       open={onOpenChange ? open : internalOpen}
       onOpenChange={handleOpenChange}
     >
-      <DialogContent className="py-5 bg-[#f8f8f7] rounded-[20px] w-[400px] shadow-[0px_4px_11px_0px_rgba(0,0,0,0.08)] border border-[rgba(0,0,0,0.08)] backdrop-blur-2xl p-0 gap-0 text-center">
-        <div className="flex flex-col items-center gap-2 p-5 pt-12">
-          {logo ? (
-            <div className="w-16 h-16 bg-white rounded-xl border border-[rgba(0,0,0,0.08)] flex items-center justify-center">
-              <img src={logo} alt="Dialog graphic" className="w-10 h-10 rounded-md" />
-            </div>
-          ) : null}
+      <DialogContent className="neo-border bg-background p-0 gap-0 max-w-sm w-[90vw] overflow-hidden border-2 border-black dark:border-white sm:rounded-none">
+        <DialogHeader className="p-4 border-b-2 border-black dark:border-white bg-white dark:bg-black sticky top-0 z-10 flex flex-row items-center justify-between space-y-0">
+          <div className="flex items-center gap-3">
+            {logo && (
+              <div className="bg-primary p-1 border-2 border-black dark:border-white">
+                <img src={logo} alt="Dialog graphic" className="w-6 h-6 rounded-none" />
+              </div>
+            )}
+            {title && (
+              <DialogTitle className="text-2xl font-black uppercase tracking-tighter transform translate-y-[1px]">
+                {title}
+              </DialogTitle>
+            )}
+          </div>
+          <DialogClose asChild>
+            <button className="w-10 h-10 flex items-center justify-center bg-destructive text-destructive-foreground border-2 border-black dark:border-white hover:translate-y-[1px] hover:translate-x-[1px] transition-all active:bg-destructive/90">
+              <X className="w-6 h-6" strokeWidth={4} />
+            </button>
+          </DialogClose>
+        </DialogHeader>
 
-          {/* Title and subtitle */}
-          {title ? (
-            <DialogTitle className="text-xl font-semibold text-[#34322d] leading-[26px] tracking-[-0.44px]">
-              {title}
-            </DialogTitle>
-          ) : null}
-          <DialogDescription className="text-sm text-[#858481] leading-5 tracking-[-0.154px]">
+        <div className="p-6 flex flex-col items-center gap-6">
+          <DialogDescription className="text-base font-bold text-center text-muted-foreground">
             Please login with Manus to continue
           </DialogDescription>
-        </div>
 
-        <DialogFooter className="px-5 py-5">
-          {/* Login button */}
-          <Button
-            onClick={onLogin}
-            className="w-full h-10 bg-[#1a1a19] hover:bg-[#1a1a19]/90 text-white rounded-[10px] text-sm font-medium leading-5 tracking-[-0.154px]"
-          >
-            Login with Manus
-          </Button>
-        </DialogFooter>
+          <DialogFooter className="w-full">
+            <Button
+              onClick={onLogin}
+              className="w-full h-12 bg-primary text-primary-foreground border-2 border-black dark:border-white rounded-none font-black text-lg hover:translate-y-[1px] hover:translate-x-[1px] transition-all active:bg-primary/90"
+            >
+              LOGIN WITH MANUS
+            </Button>
+          </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -1,0 +1,244 @@
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { useLocation } from "wouter";
+import { ArrowLeft, Trash2, Edit2, ShoppingBag } from "lucide-react";
+import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo, useSpring } from "framer-motion";
+import { useLanguage } from "@/contexts/LanguageContext";
+
+// UX_RATIONALE:
+// - spring_physics: スワイプ操作にバネのような物理挙動を導入し、指への追従性と心地よい反発感を実現。
+// - dynamic_feedback: スワイプ量に応じてゴミ箱アイコンのスケールや色を変化させ、削除の閾値を直感的に伝える。
+// - layout_animation: 削除後にリストが滑らかに詰まるアニメーションで、空間的な連続性を維持。
+// - haptic_feedback: 削除確定の閾値を超えた瞬間に振動フィードバックを与え、操作の確信度を高める。
+
+interface Record {
+  id: string;
+  text: string;
+  date: string;
+  updatedAt?: string;
+}
+
+// Swipeable Item Component with Advanced Physics
+function HistoryItem({ 
+  record, 
+  index, 
+  onDelete, 
+  onEdit,
+  formatDate 
+}: { 
+  record: Record; 
+  index: number; 
+  onDelete: (id: string) => void; 
+  onEdit: (id: string) => void;
+  formatDate: (date: string) => string;
+}) {
+  // Motion values for swipe gesture
+  const x = useMotionValue(0);
+  const dragX = useSpring(x, { stiffness: 500, damping: 30 }); // Add spring physics to drag
+  
+  // Dynamic transformations based on swipe distance
+  const deleteThreshold = -100;
+  const bgOpacity = useTransform(x, [0, -50, -100], [0, 0.5, 1]);
+  const iconScale = useTransform(x, [-50, -100, -150], [0.8, 1.2, 1.5]);
+  const iconColor = useTransform(x, [-80, -100], ["#ffffff", "#ff0000"]); // White to Red
+  
+  // Track if threshold was crossed to trigger haptic once
+  const [crossedThreshold, setCrossedThreshold] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = x.on("change", (latest) => {
+      if (latest < deleteThreshold && !crossedThreshold) {
+        setCrossedThreshold(true);
+        if (navigator.vibrate) navigator.vibrate(15); // Light tick
+      } else if (latest >= deleteThreshold && crossedThreshold) {
+        setCrossedThreshold(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [x, crossedThreshold]);
+
+  const handleDragEnd = (_: any, info: PanInfo) => {
+    if (info.offset.x < deleteThreshold || info.velocity.x < -500) {
+      // Trigger delete with velocity or distance
+      onDelete(record.id);
+    } else {
+      // Reset is handled by dragConstraints
+    }
+  };
+
+  return (
+    <motion.div
+      layout // Enable layout animation for smooth list reordering
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ 
+        opacity: 0, 
+        height: 0, 
+        marginBottom: 0, 
+        x: -300, 
+        transition: { 
+          opacity: { duration: 0.2 },
+          x: { duration: 0.2 },
+          height: { duration: 0.3, delay: 0.1 },
+          marginBottom: { duration: 0.3, delay: 0.1 }
+        } 
+      }}
+      transition={{ delay: index * 0.05 }}
+      className="relative mb-3"
+    >
+      {/* Background Layer (Delete Action) */}
+      <motion.div 
+        style={{ opacity: bgOpacity }}
+        className="absolute inset-0 bg-destructive flex items-center justify-end px-6 rounded-none"
+      >
+        <motion.div style={{ scale: iconScale, color: iconColor }}>
+          <Trash2 className="w-6 h-6 text-destructive-foreground" strokeWidth={2.5} />
+        </motion.div>
+      </motion.div>
+
+      {/* Foreground Layer (Content) */}
+      <motion.div
+        style={{ x }}
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={{ left: 0.5, right: 0.05 }} // Stiffer right resistance
+        onDragEnd={handleDragEnd}
+        whileDrag={{ scale: 1.02, cursor: "grabbing" }}
+        whileTap={{ scale: 0.98 }}
+        onClick={() => onEdit(record.id)}
+        className="relative border-2 border-border bg-card p-4 flex justify-between items-center touch-pan-y cursor-pointer select-none"
+      >
+        <div className="flex flex-col gap-1 overflow-hidden pointer-events-none w-full">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              {formatDate(record.date)}
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-base font-medium mt-1 line-clamp-2 leading-relaxed">
+              {record.text}
+            </span>
+          </div>
+        </div>
+        
+        {/* Visual indicator for swipe/edit */}
+        <div className="flex flex-col items-end gap-2 pl-2 text-muted-foreground/20 shrink-0">
+          <Edit2 className="w-4 h-4" strokeWidth={3} />
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+export default function HistoryPage() {
+  const { t, formatDate } = useLanguage();
+  const [records, setRecords] = useState<Record[]>([]);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [_, setLocation] = useLocation();
+
+  useEffect(() => {
+    const storedData = localStorage.getItem("tatac_records");
+    if (storedData) {
+      // Sort by date desc
+      const parsed = JSON.parse(storedData).sort((a: Record, b: Record) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      setRecords(parsed);
+    }
+
+    // Check tutorial status
+    const hasSeenTutorial = localStorage.getItem("tatac_swipe_tutorial_seen");
+    if (!hasSeenTutorial && storedData && JSON.parse(storedData).length > 0) {
+      setShowTutorial(true);
+      // Auto dismiss after 3 seconds
+      setTimeout(() => {
+        setShowTutorial(false);
+        localStorage.setItem("tatac_swipe_tutorial_seen", "true");
+      }, 3000);
+    }
+  }, []);
+
+  const handleDelete = (id: string) => {
+    const newRecords = records.filter((r) => r.id !== id);
+    setRecords(newRecords);
+    localStorage.setItem("tatac_records", JSON.stringify(newRecords));
+    // Stronger haptic feedback on delete
+    if (navigator.vibrate) {
+      navigator.vibrate([50, 30, 50]);
+    }
+  };
+
+  const handleEdit = (id: string) => {
+    setLocation(`/edit/${id}`);
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="min-h-screen flex flex-col bg-background text-foreground font-sans"
+    >
+      {/* Header */}
+      <header className="flex items-center px-4 py-3 border-b-2 border-border bg-background sticky top-0 z-10">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => setLocation("/")}
+          className="mr-2 w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-all active:translate-x-[-2px]"
+        >
+          <ArrowLeft className="w-6 h-6" strokeWidth={2.5} />
+        </Button>
+        <h1 className="text-lg font-black tracking-tighter uppercase flex-1">{t("history")}</h1>
+      </header>
+
+      <main className="flex-1 max-w-md mx-auto w-full p-4 overflow-x-hidden relative">
+        {/* Tutorial Overlay */}
+        <AnimatePresence>
+          {showTutorial && records.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-20 pointer-events-none flex items-start justify-center pt-12"
+            >
+              <div className="bg-foreground/90 text-background px-4 py-2 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg">
+                <motion.div
+                  animate={{ x: [-5, 5, -5] }}
+                  transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
+                >
+                  ←
+                </motion.div>
+                {t("swipeToDelete")}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence mode="popLayout">
+          {records.length === 0 ? (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center h-64 text-muted-foreground"
+            >
+              <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
+              <p className="font-bold">{t("noRecords")}</p>
+            </motion.div>
+          ) : (
+            records.map((record, index) => (
+              <HistoryItem 
+                key={record.id} 
+                record={record} 
+                index={index} 
+                onDelete={handleDelete}
+                onEdit={handleEdit}
+                formatDate={formatDate}
+              />
+            ))
+          )}
+        </AnimatePresence>
+      </main>
+    </motion.div>
+  );
+}

@@ -1,0 +1,47 @@
+{
+  "name": "サクキロ (SAKUKIRO)",
+  "short_name": "サクキロ",
+  "description": "アプリを開いた瞬間に記録完了。シンプルで高速な支出管理アプリ「サクキロ」で、日々の買い物をスマートに記録しよう。",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ff5e00",
+  "orientation": "portrait",
+  "categories": ["finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/images/icon-sakukiro-final.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/icon-sakukiro-final.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/images/icon-sakukiro-final.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/images/screenshot-mobile-1.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "ホーム画面"
+    },
+    {
+      "src": "/images/screenshot-mobile-2.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "履歴画面"
+    }
+  ]
+}
