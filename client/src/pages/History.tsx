@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
-import { ArrowLeft, Trash2, Edit2, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Trash2, Edit2, ShoppingBag, Download } from "lucide-react";
 import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo, useSpring } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { ExportModal } from "@/components/ExportModal";
 
 // UX_RATIONALE:
 // - spring_physics: スワイプ操作にバネのような物理挙動を導入し、指への追従性と心地よい反発感を実現。
@@ -134,6 +135,7 @@ export default function HistoryPage() {
   const { t, formatDate } = useLanguage();
   const [records, setRecords] = useState<Record[]>([]);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [_, setLocation] = useLocation();
 
   useEffect(() => {
@@ -180,16 +182,29 @@ export default function HistoryPage() {
       className="min-h-screen flex flex-col bg-background text-foreground font-sans"
     >
       {/* Header */}
-      <header className="flex items-center px-4 py-3 border-b-2 border-border bg-background sticky top-0 z-10">
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={() => setLocation("/")}
-          className="mr-2 w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-all active:translate-x-[-2px]"
-        >
-          <ArrowLeft className="w-6 h-6" strokeWidth={2.5} />
-        </Button>
-        <h1 className="text-lg font-black tracking-tighter uppercase flex-1">{t("history")}</h1>
+      <header className="flex items-center justify-between px-4 py-3 border-b-2 border-border bg-background sticky top-0 z-10">
+        <div className="flex items-center">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setLocation("/")}
+            className="mr-2 w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-all active:translate-x-[-2px]"
+          >
+            <ArrowLeft className="w-6 h-6" strokeWidth={2.5} />
+          </Button>
+          <h1 className="text-lg font-black tracking-tighter uppercase">{t("history")}</h1>
+        </div>
+        
+        {records.length > 0 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsExportOpen(true)}
+            className="rounded-none hover:bg-muted transition-colors"
+          >
+            <Download className="w-5 h-5" />
+          </Button>
+        )}
       </header>
 
       <main className="flex-1 max-w-md mx-auto w-full p-4 overflow-x-hidden relative">
@@ -239,6 +254,12 @@ export default function HistoryPage() {
           )}
         </AnimatePresence>
       </main>
+
+      <ExportModal 
+        isOpen={isExportOpen} 
+        onClose={() => setIsExportOpen(false)} 
+        records={records} 
+      />
     </motion.div>
   );
 }

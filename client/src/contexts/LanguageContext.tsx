@@ -46,6 +46,13 @@ const translations: Translations = {
   mobileQrButton: { ja: "QRを表示", en: "Show QR" },
   save: { ja: "保存", en: "Save" },
   close: { ja: "閉じる", en: "Close" },
+  exportData: { ja: "データエクスポート", en: "EXPORT DATA" },
+  copy: { ja: "コピー", en: "COPY" },
+  download: { ja: "ダウンロード", en: "DOWNLOAD" },
+  copied: { ja: "コピーしました", en: "COPIED" },
+  downloaded: { ja: "ダウンロードを開始しました", en: "DOWNLOAD STARTED" },
+  showQr: { ja: "モバイル用QRを表示", en: "SHOW MOBILE QR" },
+  newMemoPlaceholder: { ja: "新規メモ…", en: "New memo..." },
 };
 
 interface LanguageContextType {

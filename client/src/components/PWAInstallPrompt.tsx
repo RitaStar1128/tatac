@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Smartphone, Share, PlusSquare, MoreVertical, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useIsMobile } from "@/hooks/useMobile";
 
 // UX_RATIONALE:
 // - progressive_disclosure: ユーザーの環境（PC/スマホブラウザ/PWA）に応じて必要な情報のみを表示。
@@ -16,13 +17,12 @@ export interface PWAInstallPromptHandle {
 
 export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
   const { t, language } = useLanguage();
+  const isMobile = useIsMobile();
   const [isPWA, setIsPWA] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [currentUrl, setCurrentUrl] = useState("");
-  const [forcePC, setForcePC] = useState(false);
   const [showPcQr, setShowPcQr] = useState(false);
+  const [currentUrl, setCurrentUrl] = useState("");
   const [activePlatform, setActivePlatform] = useState<"ios" | "android">("ios");
 
   useImperativeHandle(ref, () => ({
@@ -32,46 +32,27 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
         return;
       }
       setShowModal(true);
-    },
-  }), [isMobile]);
+    }
+  }));
 
   useEffect(() => {
-    // Check if user has chosen to use PC version
-    const storedForcePC = localStorage.getItem("tatac_force_pc");
-    if (storedForcePC === "true") {
-      setForcePC(true);
-    }
-
     // Check if running as PWA
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
                          (window.navigator as any).standalone || 
                          document.referrer.includes('android-app://');
     setIsPWA(isStandalone);
 
-    // Check if mobile device
-    const mobileCheck = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    setIsMobile(mobileCheck);
-    if (mobileCheck) {
-      const isAndroid = /Android/i.test(navigator.userAgent);
-      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if (isAndroid) {
-        setActivePlatform("android");
-      } else if (isIOS) {
-        setActivePlatform("ios");
-      }
-    }
-
     // Set current URL for QR code
     setCurrentUrl(window.location.href);
 
     // Show banner if mobile and not PWA, and NOT already dismissed
-    if (mobileCheck && !isStandalone) {
+    if (isMobile && !isStandalone) {
       const hasDismissed = localStorage.getItem("tatac_pwa_banner_dismissed");
       if (!hasDismissed) {
         setShowBanner(true);
       }
     }
-  }, []);
+  }, [isMobile]);
 
   const handleDismissBanner = () => {
     setShowBanner(false);
@@ -80,53 +61,59 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
 
   if (isPWA) return null;
 
-  // PC View: Show QR Code Overlay
-  if (!isMobile && (!forcePC || showPcQr)) {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-sm p-4">
-        <div className="bg-card border-2 border-foreground p-8 max-w-md w-full text-center relative">
-          <Smartphone className="w-12 h-12 mx-auto mb-4 text-foreground" strokeWidth={2} />
-          <h2 className="text-2xl font-black uppercase tracking-tighter mb-2">
-            {language === 'ja' ? 'スマホでの利用を推奨' : 'Mobile Recommended'}
-          </h2>
-          <p className="text-sm font-bold text-muted-foreground mb-6">
-            {language === 'ja' 
-              ? 'このアプリはスマートフォンでの利用に最適化されています。以下のQRコードを読み取ってアクセスしてください。' 
-              : 'This app is optimized for mobile use. Scan the QR code below to access on your phone.'}
-          </p>
-          
-          <div className="bg-white p-4 border-2 border-black inline-block mb-4">
-            <QRCodeSVG value={currentUrl} size={180} />
-          </div>
-          
-          <p className="text-xs font-mono text-muted-foreground break-all mb-6">
-            {currentUrl}
-          </p>
-
-          <Button 
-            variant="outline" 
-            onClick={() => {
-              if (!forcePC) {
-                setForcePC(true);
-                localStorage.setItem("tatac_force_pc", "true");
-              }
-              setShowPcQr(false);
-            }}
-            className="w-full border-2 border-foreground hover:bg-accent font-bold rounded-none"
-          >
-            {forcePC ? t("close") : (language === 'ja' ? 'PC版を利用する' : 'Continue on PC')}
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Mobile View: Banner & Modal
   return (
     <>
-      {/* Bottom Banner */}
+      {/* PC QR Code Modal */}
       <AnimatePresence>
-        {showBanner && (
+        {showPcQr && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
+            onClick={() => setShowPcQr(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md bg-card border-2 border-foreground p-8 text-center relative shadow-none"
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowPcQr(false)}
+                className="absolute right-2 top-2 rounded-none hover:bg-destructive hover:text-destructive-foreground transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </Button>
+
+              <Smartphone className="w-12 h-12 mx-auto mb-4 text-foreground" strokeWidth={2} />
+              <h2 className="text-2xl font-black uppercase tracking-tighter mb-2">
+                {language === 'ja' ? 'スマホでの利用を推奨' : 'Mobile Recommended'}
+              </h2>
+              <p className="text-sm font-bold text-muted-foreground mb-6">
+                {language === 'ja' 
+                  ? 'このアプリはスマートフォンでの利用に最適化されています。以下のQRコードを読み取ってアクセスしてください。' 
+                  : 'This app is optimized for mobile use. Scan the QR code below to access on your phone.'}
+              </p>
+              
+              <div className="bg-white p-4 border-2 border-black inline-block mb-4">
+                <QRCodeSVG value={currentUrl} size={180} />
+              </div>
+              
+              <p className="text-xs font-mono text-muted-foreground break-all">
+                {currentUrl}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Mobile Bottom Banner */}
+      <AnimatePresence>
+        {showBanner && isMobile && (
           <motion.div
             initial={{ y: 100 }}
             animate={{ y: 0 }}
@@ -136,12 +123,10 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
             <div className="flex items-center justify-between max-w-md mx-auto gap-4">
               <div className="flex-1">
                 <p className="font-black text-sm uppercase tracking-wide mb-1">
-                  {language === 'ja' ? 'アプリとして使う' : 'Install App'}
+                  {t("pwaInstall")}
                 </p>
                 <p className="text-xs font-bold opacity-90 leading-tight">
-                  {language === 'ja' 
-                    ? 'ホーム画面に追加して、より快適に記録しましょう。' 
-                    : 'Add to home screen for the best experience.'}
+                  {t("pwaDesc")}
                 </p>
               </div>
               <div className="flex gap-2 shrink-0">
@@ -167,7 +152,7 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
         )}
       </AnimatePresence>
 
-      {/* Instructions Modal */}
+      {/* Mobile Instructions Modal */}
       <AnimatePresence>
         {showModal && (
           <motion.div
@@ -201,33 +186,34 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                 </Button>
               </div>
 
-              <div className="space-y-6">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setActivePlatform("ios")}
-                    className={`px-3 py-1.5 text-xs font-black uppercase border-2 transition-colors ${
-                      activePlatform === "ios"
-                        ? "bg-foreground text-background border-foreground"
-                        : "border-border text-foreground/70 hover:border-foreground"
-                    }`}
-                  >
-                    iOS
-                  </button>
-                  <button
-                    onClick={() => setActivePlatform("android")}
-                    className={`px-3 py-1.5 text-xs font-black uppercase border-2 transition-colors ${
-                      activePlatform === "android"
-                        ? "bg-foreground text-background border-foreground"
-                        : "border-border text-foreground/70 hover:border-foreground"
-                    }`}
-                  >
-                    Android
-                  </button>
-                </div>
+              {/* Platform Tabs */}
+              <div className="flex border-b-2 border-foreground mb-6">
+                <button
+                  onClick={() => setActivePlatform("ios")}
+                  className={`flex-1 py-2 font-bold text-sm uppercase transition-colors ${
+                    activePlatform === "ios" 
+                      ? "bg-foreground text-background" 
+                      : "bg-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  iPhone (iOS)
+                </button>
+                <button
+                  onClick={() => setActivePlatform("android")}
+                  className={`flex-1 py-2 font-bold text-sm uppercase transition-colors ${
+                    activePlatform === "android" 
+                      ? "bg-foreground text-background" 
+                      : "bg-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Android
+                </button>
+              </div>
 
+              <div className="space-y-8">
                 {activePlatform === "ios" ? (
-                  <div className="space-y-4">
-                    <h3 className="font-black text-sm uppercase border-b-2 border-foreground pb-1 inline-block">iPhone (iOS)</h3>
+                  /* iOS Section */
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div className="space-y-4 pl-2">
                       <Step 
                         number={1} 
@@ -252,8 +238,8 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    <h3 className="font-black text-sm uppercase border-b-2 border-foreground pb-1 inline-block">Android</h3>
+                  /* Android Section */
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div className="space-y-4 pl-2">
                       <Step 
                         number={1} 

@@ -1,233 +1,217 @@
-import React, { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { useLocation, useRoute } from "wouter";
+import { useState, useEffect, useRef } from "react";
+import { useLocation } from "wouter";
 import { History, Settings, Smartphone, HelpCircle } from "lucide-react";
-import { toast } from "sonner";
 import { motion } from "framer-motion";
-import { useLanguage } from "@/contexts/LanguageContext";
-import { PWAInstallPrompt, PWAInstallPromptHandle } from "@/components/PWAInstallPrompt";
-import { DescriptionModal } from "@/components/DescriptionModal";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { SettingsModal } from "@/components/SettingsModal";
+import { DescriptionModal } from "@/components/DescriptionModal";
+import { PWAInstallPrompt, PWAInstallPromptHandle } from "@/components/PWAInstallPrompt";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useIsMobile } from "@/hooks/useMobile";
+import { toast } from "sonner";
 
 // UX_RATIONALE:
-// - cognitive_load: 画面上の要素を極限まで減らし、テキスト入力のみに集中させることで認知負荷を最小化。
-// - fitts_law: 入力エリアを画面全体に広げ、どこをタップしても入力開始できるようにする。
-// - zeigarnik_effect: 入力完了（保存）時のフィードバックを明確にし、タスク完了の心理的区切りを提供する。
-// - haptic_feedback: 保存時に振動フィードバックを与え、視覚だけでなく触覚でも完了を伝える。
+// - distraction_free_mode: 入力時はヘッダー以外の要素を極力排除し、書くことに集中させる。
+// - auto_save: ユーザーが保存操作を意識せずとも、思考を途切れさせないように自動保存（Enter/閉じる）を行う。
+// - haptic_feedback: 保存完了時に微細な振動を与えることで、完了した感覚を身体的にフィードバックする（モバイル）。
 
 export default function Home() {
-  const { t } = useLanguage();
   const [text, setText] = useState("");
-  const [_, setLocation] = useLocation();
-  const [match, params] = useRoute("/edit/:id");
-  const isEditMode = match && !!params?.id;
-  const [originalDate, setOriginalDate] = useState<string | null>(null);
-  
-  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const pwaPromptRef = useRef<PWAInstallPromptHandle>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [isPWA, setIsPWA] = useState(false);
+  const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
+  const [, setLocation] = useLocation();
+  const { t } = useLanguage();
   const isMobile = useIsMobile();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const pwaPromptRef = useRef<PWAInstallPromptHandle>(null);
   const pendingEnterRef = useRef(false);
+  const [isPWA, setIsPWA] = useState(false);
 
-  // PWA判定
   useEffect(() => {
+    // Check if running as PWA
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
                          (window.navigator as any).standalone || 
                          document.referrer.includes('android-app://');
     setIsPWA(isStandalone);
-  }, []);
 
-  // 初回訪問判定
-  useEffect(() => {
-    const hasVisited = localStorage.getItem("has_visited_tatac");
+    // Auto-focus on mount
+    if (textareaRef.current) {
+      textareaRef.current.focus();
+    }
+
+    // Show description on first visit
+    const hasVisited = localStorage.getItem("tatac_visited");
     if (!hasVisited) {
       setIsDescriptionOpen(true);
-      localStorage.setItem("has_visited_tatac", "true");
+      localStorage.setItem("tatac_visited", "true");
     }
   }, []);
 
-  // タイトル設定
-  useEffect(() => {
-    document.title = "TATAC";
-  }, []);
-
-  // 自動フォーカス
-  useEffect(() => {
-    if (textareaRef.current && !isDescriptionOpen && !isSettingsOpen) {
-      // 少し遅延させてフォーカスを当てる（モバイルキーボード対応）
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 100);
-    }
-  }, [isDescriptionOpen, isSettingsOpen]);
-
-  // 編集モード時のデータ読み込み
-  useEffect(() => {
-    if (isEditMode && params?.id) {
-      const storedData = localStorage.getItem("tatac_records");
-      if (storedData) {
-        const records = JSON.parse(storedData);
-        const record = records.find((r: any) => r.id === params.id);
-        if (record) {
-          setText(record.text);
-          setOriginalDate(record.date);
-        } else {
-          toast.error(t("noRecords"));
-          setLocation("/history");
-        }
-      }
-    }
-  }, [isEditMode, params?.id, setLocation, t]);
-
-  const handleSave = () => {
+  const saveMemo = () => {
     if (!text.trim()) return;
 
-    pendingEnterRef.current = false;
-    const storedData = localStorage.getItem("tatac_records");
-    let records = storedData ? JSON.parse(storedData) : [];
+    const newRecord = {
+      id: crypto.randomUUID(),
+      text: text.trim(),
+      date: new Date().toISOString(),
+    };
 
-    if (isEditMode && params?.id) {
-      // 更新処理
-      records = records.map((r: any) => {
-        if (r.id === params.id) {
-          return {
-            ...r,
-            text: text,
-            date: originalDate || r.date, // 日付は維持
-            updatedAt: new Date().toISOString()
-          };
-        }
-        return r;
-      });
-      
-      localStorage.setItem("tatac_records", JSON.stringify(records));
-      setLocation("/history");
-    } else {
-      // 新規作成処理
-      const newRecord = {
-        id: crypto.randomUUID(),
-        text: text,
-        date: new Date().toISOString(),
-      };
-      
-      localStorage.setItem("tatac_records", JSON.stringify([newRecord, ...records]));
+    const existingRecords = JSON.parse(localStorage.getItem("tatac_records") || "[]");
+    localStorage.setItem("tatac_records", JSON.stringify([newRecord, ...existingRecords]));
 
-      // 保存フィードバック
-      if (navigator.vibrate) navigator.vibrate(50);
-      setText("");
+    setText("");
+    toast.success(t("saved"), {
+      duration: 1500,
+      position: "bottom-center",
+      className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
+    });
+    
+    // Haptic feedback if available
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
     }
   };
 
-  // キーボードイベントハンドラ
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (isMobile) return;
-    if (e.key !== "Enter") {
-      pendingEnterRef.current = false;
+    if (isMobile) {
+      // Mobile: Enter for new line (default behavior)
       return;
     }
-    if (e.ctrlKey || e.metaKey) {
-      pendingEnterRef.current = false;
-      return;
+
+    // PC: Ctrl+Enter for new line, Enter to save
+    if (e.key === "Enter") {
+      if (e.ctrlKey || e.metaKey) {
+        // Allow new line
+        return;
+      }
+      
+      // Prevent default Enter behavior (new line) and save
+      e.preventDefault();
+      
+      // Prevent accidental double saves or rapid firing
+      if (pendingEnterRef.current) return;
+      
+      if (text.trim()) {
+        pendingEnterRef.current = true;
+        saveMemo();
+        // Reset pending flag after a short delay
+        setTimeout(() => {
+          pendingEnterRef.current = false;
+        }, 500);
+      }
     }
-    e.preventDefault();
-    if (pendingEnterRef.current) {
-      pendingEnterRef.current = false;
-      handleSave();
-      return;
+  };
+
+  // Mobile save button handler
+  const handleMobileSave = () => {
+    if (text.trim()) {
+      saveMemo();
+      // Keep focus for continuous writing
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
     }
-    pendingEnterRef.current = true;
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="h-[100dvh] flex flex-col bg-background text-foreground font-sans overflow-hidden"
-    >
-      <PWAInstallPrompt ref={pwaPromptRef} />
-      <DescriptionModal isOpen={isDescriptionOpen} onClose={() => setIsDescriptionOpen(false)} />
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onOpenMobileQr={() => pwaPromptRef.current?.open()}
-      />
-      
-      {/* Header - Minimal */}
-      <header className="flex justify-between items-center px-4 py-3 shrink-0 z-20 bg-background/80 backdrop-blur-sm absolute top-0 left-0 right-0">
+    <div className="h-[100dvh] flex flex-col bg-background text-foreground overflow-hidden">
+      {/* Header */}
+      <header className="flex items-center justify-between px-4 py-3 border-b-2 border-foreground shrink-0 z-10 bg-background">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-black tracking-tighter text-xl">TATAC</span>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => setIsDescriptionOpen(true)}
-              className="w-8 h-8 rounded-full hover:bg-accent hover:text-accent-foreground opacity-50 hover:opacity-100 transition-opacity"
-            >
-              <HelpCircle className="w-5 h-5" />
-            </Button>
+          <div className="w-8 h-8 bg-foreground text-background flex items-center justify-center font-black text-lg select-none">
+            T
           </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsDescriptionOpen(true)}
+            className="rounded-full w-8 h-8 hover:bg-muted transition-colors"
+          >
+            <HelpCircle className="w-5 h-5" />
+          </Button>
         </div>
-
+        
         <div className="flex items-center gap-1">
-          {!isPWA && (
-            <Button 
-              variant="ghost" 
-              size="icon" 
+          {/* PWA Install Button - Only show on mobile browser (not PWA, not PC) */}
+          {isMobile && !isPWA && (
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => pwaPromptRef.current?.open()}
-              className="w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground hidden md:flex"
-              title={t("pwaInstall")}
+              className="rounded-none hover:bg-muted transition-colors"
             >
               <Smartphone className="w-5 h-5" />
             </Button>
           )}
-          
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setIsSettingsOpen(true)}
-            className="w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground"
-          >
-            <Settings className="w-5 h-5" />
-          </Button>
 
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setLocation("/history")}
-            className="w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground"
+            className="rounded-none hover:bg-muted transition-colors"
           >
             <History className="w-5 h-5" />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsSettingsOpen(true)}
+            className="rounded-none hover:bg-muted transition-colors"
+          >
+            <Settings className="w-5 h-5" />
           </Button>
         </div>
       </header>
 
       {/* Main Input Area */}
-      <main className="flex-1 flex flex-col relative pt-16 pb-4 px-4">
-        <textarea
+      <main className="flex-1 relative flex flex-col">
+        <Textarea
           ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
-          className="flex-1 w-full bg-transparent border-none outline-none resize-none text-lg md:text-xl leading-relaxed placeholder:text-muted-foreground/30 font-medium"
-          placeholder=""
+          placeholder={t("newMemoPlaceholder")}
+          className="flex-1 w-full h-full resize-none border-none focus-visible:ring-0 p-6 text-lg md:text-xl leading-relaxed bg-transparent placeholder:text-muted-foreground/30"
           spellCheck={false}
         />
-        {isMobile && (
-          <div className="pt-4">
+        
+        {/* Mobile Save Button (Floating) */}
+        {isMobile && text.trim().length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="absolute bottom-4 right-4 z-20"
+          >
             <Button
-              onClick={handleSave}
-              className="w-full h-12 text-base font-black rounded-none"
-              disabled={!text.trim()}
+              onClick={handleMobileSave}
+              size="lg"
+              className="rounded-full w-14 h-14 shadow-none border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold text-xs flex flex-col items-center justify-center gap-0.5"
             >
-              {t("save")}
+              <span>SAVE</span>
             </Button>
-          </div>
+          </motion.div>
         )}
       </main>
-    </motion.div>
+
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)}
+        onOpenMobileQr={() => {
+          setIsSettingsOpen(false);
+          // Small delay to allow modal to close first
+          setTimeout(() => pwaPromptRef.current?.open(), 100);
+        }}
+      />
+      
+      <DescriptionModal 
+        isOpen={isDescriptionOpen} 
+        onClose={() => setIsDescriptionOpen(false)} 
+      />
+      
+      <PWAInstallPrompt ref={pwaPromptRef} />
+    </div>
   );
 }
