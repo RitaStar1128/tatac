@@ -35,9 +35,9 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-card border-2 border-foreground p-6 shadow-none relative"
+            className="w-full max-w-md bg-card border-2 border-foreground shadow-none relative max-h-[80vh] flex flex-col overflow-hidden"
           >
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center border-b-2 border-foreground bg-card px-6 py-4 sticky top-0 z-10">
               <h2 className="text-xl font-black tracking-tighter uppercase flex items-center gap-2">
                 <span className="bg-foreground text-background px-2 py-1">
                   <SettingsIcon className="w-4 h-4" />
@@ -54,7 +54,7 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
               </Button>
             </div>
 
-            <div className="space-y-8">
+            <div className="space-y-8 p-6 overflow-y-auto flex-1">
               {/* Language Section */}
               <div className="space-y-3">
                 <label className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
