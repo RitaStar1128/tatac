@@ -48,10 +48,13 @@ export function DescriptionModal({ isOpen, onClose }: DescriptionModalProps) {
             </div>
 
             <div className="space-y-6">
-              <div>
+              <div className="space-y-3">
                 <h3 className="font-bold text-lg mb-2 border-b-2 border-foreground inline-block">PHILOSOPHY</h3>
                 <p className="text-muted-foreground font-medium leading-relaxed">
                   {t("aboutDesc")}
+                </p>
+                <p className="text-muted-foreground font-medium leading-relaxed">
+                  {t("aboutDescDetail")}
                 </p>
               </div>
 
@@ -59,15 +62,19 @@ export function DescriptionModal({ isOpen, onClose }: DescriptionModalProps) {
                 <ul className="space-y-2 text-sm font-bold">
                   <li className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-accent rounded-full" />
-                    Input immediately upon opening
+                    {t("aboutBullet1")}
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-accent rounded-full" />
-                    Auto-save on Enter or Close
+                    {t("aboutBullet2")}
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="w-1.5 h-1.5 bg-accent rounded-full" />
-                    Pure text, no distractions
+                    {t("aboutBullet3")}
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 bg-accent rounded-full" />
+                    {t("aboutBullet4")}
                   </li>
                 </ul>
               </div>

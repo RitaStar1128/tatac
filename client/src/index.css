@@ -44,13 +44,13 @@
 
 :root {
   /* Zen Monolith Palette */
-  --color-white: oklch(1 0 0);
-  --color-black: oklch(0 0 0);
-  --color-grey-50: oklch(0.98 0 0);
-  --color-grey-100: oklch(0.95 0 0);
-  --color-grey-200: oklch(0.9 0 0);
-  --color-grey-800: oklch(0.2 0 0);
-  --color-grey-900: oklch(0.1 0 0);
+  --color-white: oklch(0.98 0 0);
+  --color-black: oklch(0.12 0 0);
+  --color-grey-50: oklch(0.96 0 0);
+  --color-grey-100: oklch(0.93 0 0);
+  --color-grey-200: oklch(0.88 0 0);
+  --color-grey-800: oklch(0.24 0 0);
+  --color-grey-900: oklch(0.16 0 0);
   
   /* Accent Color - Minimal Red */
   --color-accent-red: oklch(0.6 0.2 20);
