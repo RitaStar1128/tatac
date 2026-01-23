@@ -156,6 +156,34 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  .modal-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-grey-800) transparent;
+  }
+
+  .dark .modal-scroll {
+    scrollbar-color: var(--color-grey-200) transparent;
+  }
+
+  .modal-scroll::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .modal-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .modal-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--color-grey-800);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .dark .modal-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--color-grey-200);
+  }
 }
 
 @layer components {

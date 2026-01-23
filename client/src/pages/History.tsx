@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { ArrowLeft, Trash2, Edit2, ShoppingBag, Download } from "lucide-react";
@@ -45,6 +45,7 @@ function HistoryItem({
   
   // Track if threshold was crossed to trigger haptic once
   const [crossedThreshold, setCrossedThreshold] = useState(false);
+  const suppressClickRef = useRef(false);
 
   useEffect(() => {
     const unsubscribe = x.on("change", (latest) => {
@@ -58,12 +59,27 @@ function HistoryItem({
     return () => unsubscribe();
   }, [x, crossedThreshold]);
 
+  const handleDrag = (_: any, info: PanInfo) => {
+    if (Math.abs(info.offset.x) > 5) {
+      suppressClickRef.current = true;
+    }
+  };
+
   const handleDragEnd = (_: any, info: PanInfo) => {
+    const didDrag = Math.abs(info.offset.x) > 5;
     if (info.offset.x < deleteThreshold || info.velocity.x < -500) {
       // Trigger delete with velocity or distance
       onDelete(record.id);
     } else {
       // Reset is handled by dragConstraints
+    }
+    if (didDrag) {
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    } else {
+      suppressClickRef.current = false;
     }
   };
 
@@ -103,10 +119,14 @@ function HistoryItem({
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
         dragElastic={{ left: 0.5, right: 0.05 }} // Stiffer right resistance
+        onDrag={handleDrag}
         onDragEnd={handleDragEnd}
         whileDrag={{ scale: 1.02, cursor: "grabbing" }}
         whileTap={{ scale: 0.98 }}
-        onClick={() => onEdit(record.id)}
+        onClick={() => {
+          if (suppressClickRef.current) return;
+          onEdit(record.id);
+        }}
         className="relative border-2 border-border bg-card p-4 flex justify-between items-center touch-pan-y cursor-pointer select-none"
       >
         <div className="flex flex-col gap-1 overflow-hidden pointer-events-none w-full">

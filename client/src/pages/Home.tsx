@@ -148,19 +148,19 @@ export default function Home() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setLocation("/history")}
+            onClick={() => setIsSettingsOpen(true)}
             className="rounded-none hover:bg-muted transition-colors"
           >
-            <History className="w-5 h-5" />
+            <Settings className="w-5 h-5" />
           </Button>
           
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsSettingsOpen(true)}
+            onClick={() => setLocation("/history")}
             className="rounded-none hover:bg-muted transition-colors"
           >
-            <Settings className="w-5 h-5" />
+            <History className="w-5 h-5" />
           </Button>
         </div>
       </header>

@@ -54,7 +54,7 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
               </Button>
             </div>
 
-            <div className="space-y-8 p-6 overflow-y-auto flex-1">
+            <div className="space-y-8 p-6 overflow-y-auto flex-1 modal-scroll">
               {/* Language Section */}
               <div className="space-y-3">
                 <label className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">

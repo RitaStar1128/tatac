@@ -104,7 +104,7 @@ export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
               </Button>
             </div>
 
-            <div className="space-y-6 p-6 overflow-y-auto flex-1">
+            <div className="space-y-6 p-6 overflow-y-auto flex-1 modal-scroll">
               {/* JSON Export */}
               <div className="space-y-2">
                 <h3 className="font-bold text-sm uppercase flex items-center gap-2">

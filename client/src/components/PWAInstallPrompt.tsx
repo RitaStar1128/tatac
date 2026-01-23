@@ -96,7 +96,7 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                   </h2>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="flex-1 overflow-y-auto p-6 space-y-6 modal-scroll">
                 <p className="text-sm font-bold text-muted-foreground">
                   {language === 'ja' 
                     ? 'このアプリはスマートフォンでの利用に最適化されています。以下のQRコードを読み取ってアクセスしてください。' 
@@ -191,7 +191,7 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                 </Button>
               </div>
 
-              <div className="p-6 overflow-y-auto flex-1 space-y-6">
+              <div className="p-6 overflow-y-auto flex-1 space-y-6 modal-scroll">
                 {/* Platform Tabs */}
                 <div className="flex border-b-2 border-foreground">
                   <button

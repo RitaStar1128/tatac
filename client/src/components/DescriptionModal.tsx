@@ -52,7 +52,7 @@ export function DescriptionModal({ isOpen, onClose }: DescriptionModalProps) {
               </Button>
             </div>
 
-            <div className="space-y-6 p-6 overflow-y-auto flex-1">
+            <div className="space-y-6 p-6 overflow-y-auto flex-1 modal-scroll">
               <div className="space-y-3">
                 <h3 className="font-bold text-lg mb-2 border-b-2 border-foreground inline-block">PHILOSOPHY</h3>
                 <p className="text-muted-foreground font-medium leading-relaxed">

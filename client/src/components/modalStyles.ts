@@ -11,4 +11,4 @@ export const modalCloseButtonClass =
 
 export const modalTitleClass = "text-2xl font-black uppercase tracking-tighter translate-y-[1px]";
 
-export const modalBodyClass = "flex-1 overflow-y-auto bg-background";
+export const modalBodyClass = "flex-1 overflow-y-auto bg-background modal-scroll";
