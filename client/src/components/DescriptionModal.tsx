@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/useMobile";
 
 // UX_RATIONALE:
 // - progressive_disclosure: 必要な情報のみを提示し、詳細なチュートリアルは排除。
@@ -14,6 +15,10 @@ interface DescriptionModalProps {
 
 export function DescriptionModal({ isOpen, onClose }: DescriptionModalProps) {
   const { t } = useLanguage();
+  const isMobile = useIsMobile();
+  const usageKeys = isMobile
+    ? ["aboutMobileBullet1", "aboutMobileBullet2", "aboutMobileBullet3", "aboutMobileBullet4"]
+    : ["aboutPcBullet1", "aboutPcBullet2", "aboutPcBullet3", "aboutPcBullet4"];
 
   return (
     <AnimatePresence>
@@ -58,25 +63,20 @@ export function DescriptionModal({ isOpen, onClose }: DescriptionModalProps) {
                 </p>
               </div>
 
-              <div className="bg-muted p-4 border border-border">
-                <ul className="space-y-2 text-sm font-bold">
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-accent rounded-full" />
-                    {t("aboutBullet1")}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-accent rounded-full" />
-                    {t("aboutBullet2")}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-accent rounded-full" />
-                    {t("aboutBullet3")}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-accent rounded-full" />
-                    {t("aboutBullet4")}
-                  </li>
-                </ul>
+              <div className="space-y-3">
+                <h3 className="font-bold text-lg border-b-2 border-foreground inline-block">
+                  {t("aboutUsageTitle")}
+                </h3>
+                <div className="bg-muted p-4 border border-border">
+                  <ul className="space-y-2 text-sm font-bold">
+                    {usageKeys.map((key) => (
+                      <li key={key} className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 bg-accent rounded-full" />
+                        {t(key)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </div>
           </motion.div>

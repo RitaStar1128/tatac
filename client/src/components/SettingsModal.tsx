@@ -1,8 +1,9 @@
-import { X, Monitor, Moon, Sun, Globe, Settings as SettingsIcon } from "lucide-react";
+import { X, Monitor, Moon, Sun, Globe, Smartphone, Settings as SettingsIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/useMobile";
 
 // UX_RATIONALE:
 // - modal_design: DescriptionModalと統一されたデザイン。
@@ -11,11 +12,13 @@ import { Button } from "@/components/ui/button";
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenMobileQr?: () => void;
 }
 
-export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModalProps) {
   const { t, language, setLanguage } = useLanguage();
   const { theme, setTheme } = useTheme();
+  const isMobile = useIsMobile();
 
   return (
     <AnimatePresence>
@@ -124,6 +127,22 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   </button>
                 </div>
               </div>
+
+              {!isMobile && onOpenMobileQr && (
+                <div className="space-y-3">
+                  <label className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                    <Smartphone className="w-3 h-3" />
+                    {t("mobileQr")}
+                  </label>
+                  <Button
+                    variant="outline"
+                    onClick={onOpenMobileQr}
+                    className="w-full border-2 border-foreground hover:bg-accent font-bold rounded-none"
+                  >
+                    {t("mobileQrButton")}
+                  </Button>
+                </div>
+              )}
             </div>
           </motion.div>
         </motion.div>

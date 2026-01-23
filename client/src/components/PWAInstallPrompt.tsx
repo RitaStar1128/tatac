@@ -22,10 +22,18 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
   const [showModal, setShowModal] = useState(false);
   const [currentUrl, setCurrentUrl] = useState("");
   const [forcePC, setForcePC] = useState(false);
+  const [showPcQr, setShowPcQr] = useState(false);
+  const [activePlatform, setActivePlatform] = useState<"ios" | "android">("ios");
 
   useImperativeHandle(ref, () => ({
-    open: () => setShowModal(true)
-  }));
+    open: () => {
+      if (!isMobile) {
+        setShowPcQr(true);
+        return;
+      }
+      setShowModal(true);
+    },
+  }), [isMobile]);
 
   useEffect(() => {
     // Check if user has chosen to use PC version
@@ -43,6 +51,15 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
     // Check if mobile device
     const mobileCheck = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     setIsMobile(mobileCheck);
+    if (mobileCheck) {
+      const isAndroid = /Android/i.test(navigator.userAgent);
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      if (isAndroid) {
+        setActivePlatform("android");
+      } else if (isIOS) {
+        setActivePlatform("ios");
+      }
+    }
 
     // Set current URL for QR code
     setCurrentUrl(window.location.href);
@@ -64,7 +81,7 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
   if (isPWA) return null;
 
   // PC View: Show QR Code Overlay
-  if (!isMobile && !forcePC) {
+  if (!isMobile && (!forcePC || showPcQr)) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-sm p-4">
         <div className="bg-card border-2 border-foreground p-8 max-w-md w-full text-center relative">
@@ -89,12 +106,15 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
           <Button 
             variant="outline" 
             onClick={() => {
-              setForcePC(true);
-              localStorage.setItem("tatac_force_pc", "true");
+              if (!forcePC) {
+                setForcePC(true);
+                localStorage.setItem("tatac_force_pc", "true");
+              }
+              setShowPcQr(false);
             }}
             className="w-full border-2 border-foreground hover:bg-accent font-bold rounded-none"
           >
-            {language === 'ja' ? 'PC版を利用する' : 'Continue on PC'}
+            {forcePC ? t("close") : (language === 'ja' ? 'PC版を利用する' : 'Continue on PC')}
           </Button>
         </div>
       </div>
@@ -181,60 +201,83 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                 </Button>
               </div>
 
-              <div className="space-y-8">
-                {/* iOS Section */}
-                <div className="space-y-4">
-                  <h3 className="font-black text-sm uppercase border-b-2 border-foreground pb-1 inline-block">iPhone (iOS)</h3>
-                  <div className="space-y-4 pl-2">
-                    <Step 
-                      number={1} 
-                      text={language === 'ja' ? 'Safariでこのページを開きます。' : 'Open this page in Safari.'} 
-                      icon={<Monitor className="w-5 h-5" />}
-                    />
-                    <Step 
-                      number={2} 
-                      text={language === 'ja' ? '画面下部の「共有」ボタンをタップします。' : 'Tap the "Share" button at the bottom.'} 
-                      icon={<Share className="w-5 h-5" />}
-                    />
-                    <Step 
-                      number={3} 
-                      text={language === 'ja' ? 'メニューをスクロールして「ホーム画面に追加」を選択します。' : 'Scroll down and select "Add to Home Screen".'} 
-                      icon={<PlusSquare className="w-5 h-5" />}
-                    />
-                    <Step 
-                      number={4} 
-                      text={language === 'ja' ? '右上の「追加」をタップして完了です。' : 'Tap "Add" in the top right corner.'} 
-                      isLast
-                    />
-                  </div>
+              <div className="space-y-6">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setActivePlatform("ios")}
+                    className={`px-3 py-1.5 text-xs font-black uppercase border-2 transition-colors ${
+                      activePlatform === "ios"
+                        ? "bg-foreground text-background border-foreground"
+                        : "border-border text-foreground/70 hover:border-foreground"
+                    }`}
+                  >
+                    iOS
+                  </button>
+                  <button
+                    onClick={() => setActivePlatform("android")}
+                    className={`px-3 py-1.5 text-xs font-black uppercase border-2 transition-colors ${
+                      activePlatform === "android"
+                        ? "bg-foreground text-background border-foreground"
+                        : "border-border text-foreground/70 hover:border-foreground"
+                    }`}
+                  >
+                    Android
+                  </button>
                 </div>
 
-                {/* Android Section */}
-                <div className="space-y-4">
-                  <h3 className="font-black text-sm uppercase border-b-2 border-foreground pb-1 inline-block">Android</h3>
-                  <div className="space-y-4 pl-2">
-                    <Step 
-                      number={1} 
-                      text={language === 'ja' ? 'Chromeでこのページを開きます。' : 'Open this page in Chrome.'} 
-                      icon={<Monitor className="w-5 h-5" />}
-                    />
-                    <Step 
-                      number={2} 
-                      text={language === 'ja' ? '右上のメニューアイコン（︙）をタップします。' : 'Tap the menu icon (︙) in the top right.'} 
-                      icon={<MoreVertical className="w-5 h-5" />}
-                    />
-                    <Step 
-                      number={3} 
-                      text={language === 'ja' ? '「ホーム画面に追加」または「アプリをインストール」を選択します。' : 'Select "Add to Home screen" or "Install app".'} 
-                      icon={<Smartphone className="w-5 h-5" />}
-                    />
-                    <Step 
-                      number={4} 
-                      text={language === 'ja' ? '確認画面で「追加」をタップして完了です。' : 'Tap "Add" to confirm.'} 
-                      isLast
-                    />
+                {activePlatform === "ios" ? (
+                  <div className="space-y-4">
+                    <h3 className="font-black text-sm uppercase border-b-2 border-foreground pb-1 inline-block">iPhone (iOS)</h3>
+                    <div className="space-y-4 pl-2">
+                      <Step 
+                        number={1} 
+                        text={language === 'ja' ? 'Safariでこのページを開きます。' : 'Open this page in Safari.'} 
+                        icon={<Monitor className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={2} 
+                        text={language === 'ja' ? '画面下部の「共有」ボタンをタップします。' : 'Tap the "Share" button at the bottom.'} 
+                        icon={<Share className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={3} 
+                        text={language === 'ja' ? 'メニューをスクロールして「ホーム画面に追加」を選択します。' : 'Scroll down and select "Add to Home Screen".'} 
+                        icon={<PlusSquare className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={4} 
+                        text={language === 'ja' ? '右上の「追加」をタップして完了です。' : 'Tap "Add" in the top right corner.'} 
+                        isLast
+                      />
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-4">
+                    <h3 className="font-black text-sm uppercase border-b-2 border-foreground pb-1 inline-block">Android</h3>
+                    <div className="space-y-4 pl-2">
+                      <Step 
+                        number={1} 
+                        text={language === 'ja' ? 'Chromeでこのページを開きます。' : 'Open this page in Chrome.'} 
+                        icon={<Monitor className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={2} 
+                        text={language === 'ja' ? '右上のメニューアイコン（︙）をタップします。' : 'Tap the menu icon (︙) in the top right.'} 
+                        icon={<MoreVertical className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={3} 
+                        text={language === 'ja' ? '「ホーム画面に追加」または「アプリをインストール」を選択します。' : 'Select "Add to Home screen" or "Install app".'} 
+                        icon={<Smartphone className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={4} 
+                        text={language === 'ja' ? '確認画面で「追加」をタップして完了です。' : 'Tap "Add" to confirm.'} 
+                        isLast
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           </motion.div>

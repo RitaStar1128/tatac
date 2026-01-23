@@ -3,11 +3,12 @@ import { Button } from "@/components/ui/button";
 import { useLocation, useRoute } from "wouter";
 import { History, Settings, Smartphone, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { PWAInstallPrompt, PWAInstallPromptHandle } from "@/components/PWAInstallPrompt";
 import { DescriptionModal } from "@/components/DescriptionModal";
 import { SettingsModal } from "@/components/SettingsModal";
+import { useIsMobile } from "@/hooks/useMobile";
 
 // UX_RATIONALE:
 // - cognitive_load: 画面上の要素を極限まで減らし、テキスト入力のみに集中させることで認知負荷を最小化。
@@ -18,7 +19,6 @@ import { SettingsModal } from "@/components/SettingsModal";
 export default function Home() {
   const { t } = useLanguage();
   const [text, setText] = useState("");
-  const [isSaved, setIsSaved] = useState(false);
   const [_, setLocation] = useLocation();
   const [match, params] = useRoute("/edit/:id");
   const isEditMode = match && !!params?.id;
@@ -29,6 +29,8 @@ export default function Home() {
   const pwaPromptRef = useRef<PWAInstallPromptHandle>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [isPWA, setIsPWA] = useState(false);
+  const isMobile = useIsMobile();
+  const pendingEnterRef = useRef(false);
 
   // PWA判定
   useEffect(() => {
@@ -83,6 +85,7 @@ export default function Home() {
   const handleSave = () => {
     if (!text.trim()) return;
 
+    pendingEnterRef.current = false;
     const storedData = localStorage.getItem("tatac_records");
     let records = storedData ? JSON.parse(storedData) : [];
 
@@ -113,23 +116,29 @@ export default function Home() {
       localStorage.setItem("tatac_records", JSON.stringify([newRecord, ...records]));
 
       // 保存フィードバック
-      setIsSaved(true);
       if (navigator.vibrate) navigator.vibrate(50);
-      
-      setTimeout(() => {
-        setIsSaved(false);
-        setText("");
-      }, 800);
+      setText("");
     }
   };
 
   // キーボードイベントハンドラ
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Enterキー（Shiftなし）で保存
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSave();
+    if (isMobile) return;
+    if (e.key !== "Enter") {
+      pendingEnterRef.current = false;
+      return;
     }
+    if (e.ctrlKey || e.metaKey) {
+      pendingEnterRef.current = false;
+      return;
+    }
+    e.preventDefault();
+    if (pendingEnterRef.current) {
+      pendingEnterRef.current = false;
+      handleSave();
+      return;
+    }
+    pendingEnterRef.current = true;
   };
 
   return (
@@ -141,7 +150,11 @@ export default function Home() {
     >
       <PWAInstallPrompt ref={pwaPromptRef} />
       <DescriptionModal isOpen={isDescriptionOpen} onClose={() => setIsDescriptionOpen(false)} />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onOpenMobileQr={() => pwaPromptRef.current?.open()}
+      />
       
       {/* Header - Minimal */}
       <header className="flex justify-between items-center px-4 py-3 shrink-0 z-20 bg-background/80 backdrop-blur-sm absolute top-0 left-0 right-0">
@@ -203,22 +216,17 @@ export default function Home() {
           placeholder=""
           spellCheck={false}
         />
-        
-        {/* Save Indicator / Flash */}
-        <AnimatePresence>
-          {isSaved && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 flex items-center justify-center pointer-events-none bg-background/50 backdrop-blur-[2px] z-10"
+        {isMobile && (
+          <div className="pt-4">
+            <Button
+              onClick={handleSave}
+              className="w-full h-12 text-base font-black rounded-none"
+              disabled={!text.trim()}
             >
-              <div className="text-accent font-black text-4xl tracking-widest uppercase">
-                SAVED
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              {t("save")}
+            </Button>
+          </div>
+        )}
       </main>
     </motion.div>
   );
