@@ -1,16 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
-import { ArrowLeft, Trash2, Edit2, ShoppingBag, Download } from "lucide-react";
+import { ArrowLeft, Trash2, Edit2, ShoppingBag, Download, Copy } from "lucide-react";
 import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo, useSpring } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ExportModal } from "@/components/ExportModal";
+import { toast } from "sonner";
 
 // UX_RATIONALE:
+// - readability: メモの内容を省略せずに全て表示することで、詳細を確認するためにタップする手間を省く。
+// - efficiency: コピーボタンを各項目に配置し、ワンタップでクリップボードにコピーできるようにする。
 // - spring_physics: スワイプ操作にバネのような物理挙動を導入し、指への追従性と心地よい反発感を実現。
 // - dynamic_feedback: スワイプ量に応じてゴミ箱アイコンのスケールや色を変化させ、削除の閾値を直感的に伝える。
-// - layout_animation: 削除後にリストが滑らかに詰まるアニメーションで、空間的な連続性を維持。
-// - haptic_feedback: 削除確定の閾値を超えた瞬間に振動フィードバックを与え、操作の確信度を高める。
 
 interface Record {
   id: string;
@@ -25,12 +26,14 @@ function HistoryItem({
   index, 
   onDelete, 
   onEdit,
+  onCopy,
   formatDate 
 }: { 
   record: Record; 
   index: number; 
   onDelete: (id: string) => void; 
   onEdit: (id: string) => void;
+  onCopy: (text: string) => void;
   formatDate: (date: string) => string;
 }) {
   // Motion values for swipe gesture
@@ -127,24 +130,43 @@ function HistoryItem({
           if (suppressClickRef.current) return;
           onEdit(record.id);
         }}
-        className="relative border-2 border-border bg-card p-4 flex justify-between items-center touch-pan-y cursor-pointer select-none"
+        className="relative border-2 border-border bg-card p-4 flex flex-col gap-3 touch-pan-y cursor-pointer select-none"
       >
-        <div className="flex flex-col gap-1 overflow-hidden pointer-events-none w-full">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-              {formatDate(record.date)}
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-base font-medium mt-1 line-clamp-2 leading-relaxed">
-              {record.text}
-            </span>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            {formatDate(record.date)}
+            {record.updatedAt && (
+              <span className="ml-2 opacity-70">
+                (edited)
+              </span>
+            )}
+          </span>
+          
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onCopy(record.text)}
+              className="h-8 w-8 rounded-full hover:bg-muted transition-colors"
+            >
+              <Copy className="w-4 h-4 text-muted-foreground" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onEdit(record.id)}
+              className="h-8 w-8 rounded-full hover:bg-muted transition-colors"
+            >
+              <Edit2 className="w-4 h-4 text-muted-foreground" />
+            </Button>
           </div>
         </div>
-        
-        {/* Visual indicator for swipe/edit */}
-        <div className="flex flex-col items-end gap-2 pl-2 text-muted-foreground/20 shrink-0">
-          <Edit2 className="w-4 h-4" strokeWidth={3} />
+
+        <div className="flex flex-col">
+          <span className="text-base font-medium leading-relaxed whitespace-pre-wrap break-words">
+            {record.text}
+          </span>
         </div>
       </motion.div>
     </motion.div>
@@ -192,6 +214,22 @@ export default function HistoryPage() {
 
   const handleEdit = (id: string) => {
     setLocation(`/edit/${id}`);
+  };
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      toast.success(t("copied"), {
+        duration: 1500,
+        className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
+      });
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+    }).catch(() => {
+      toast.error("Failed to copy", {
+        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+      });
+    });
   };
 
   return (
@@ -268,6 +306,7 @@ export default function HistoryPage() {
                 index={index} 
                 onDelete={handleDelete}
                 onEdit={handleEdit}
+                onCopy={handleCopy}
                 formatDate={formatDate}
               />
             ))
