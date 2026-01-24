@@ -39,6 +39,7 @@ function HistoryItem({
   onCopy: (text: string) => void;
   formatDate: (date: string) => string;
 }) {
+  const { t } = useLanguage();
   // Motion values for swipe gesture
   const x = useMotionValue(0);
   const dragX = useSpring(x, { stiffness: 500, damping: 30 }); // Add spring physics to drag
@@ -140,7 +141,7 @@ function HistoryItem({
             {formatDate(record.date)}
             {record.updatedAt && (
               <span className="ml-2 opacity-70">
-                (edited)
+                ({t("edited")})
               </span>
             )}
           </span>
@@ -245,7 +246,7 @@ export default function HistoryPage() {
         navigator.vibrate(50);
       }
     }).catch(() => {
-      toast.error("Failed to copy", {
+      toast.error(t("copyFailed"), {
         className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
       });
     });
@@ -291,7 +292,7 @@ export default function HistoryPage() {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("searchPlaceholder") || "Search memos..."}
+            placeholder={t("searchPlaceholder")}
             className="pl-9 pr-9 h-10 rounded-none border-border focus-visible:ring-1 focus-visible:ring-foreground bg-muted/30"
           />
           {searchQuery && (
@@ -339,7 +340,7 @@ export default function HistoryPage() {
             >
               <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
               <p className="font-bold">
-                {searchQuery ? "No matching memos found" : t("noRecords")}
+                {searchQuery ? t("noMatchingMemos") : t("noRecords")}
               </p>
             </motion.div>
           ) : (

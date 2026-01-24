@@ -11,6 +11,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { X } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 // UX_RATIONALE:
 // - consistency: 他のモーダル（Settings, Export, PWA, Help）と構造・デザインを統一し、学習コストを下げる。
@@ -33,6 +34,7 @@ export function ManusDialog({
   onOpenChange,
   onClose,
 }: ManusDialogProps) {
+  const { t } = useLanguage();
   const [internalOpen, setInternalOpen] = useState(open);
 
   useEffect(() => {
@@ -81,7 +83,7 @@ export function ManusDialog({
 
         <div className="p-6 flex flex-col items-center gap-6">
           <DialogDescription className="text-base font-bold text-center text-muted-foreground">
-            Please login with Manus to continue
+            {t("manusLoginDescription")}
           </DialogDescription>
 
           <DialogFooter className="w-full">
@@ -89,7 +91,7 @@ export function ManusDialog({
               onClick={onLogin}
               className="w-full h-12 bg-primary text-primary-foreground border-2 border-black dark:border-white rounded-none font-black text-lg hover:translate-y-[1px] hover:translate-x-[1px] transition-all active:bg-primary/90"
             >
-              LOGIN WITH MANUS
+              {t("manusLoginButton")}
             </Button>
           </DialogFooter>
         </div>

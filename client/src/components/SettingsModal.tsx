@@ -70,7 +70,7 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
                         : "bg-transparent border-muted-foreground/20 hover:border-foreground"
                     }`}
                   >
-                    日本語
+                    {t("languageJa")}
                   </button>
                   <button
                     onClick={() => setLanguage("en")}
@@ -80,7 +80,7 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
                         : "bg-transparent border-muted-foreground/20 hover:border-foreground"
                     }`}
                   >
-                    English
+                    {t("languageEn")}
                   </button>
                 </div>
               </div>

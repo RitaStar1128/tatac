@@ -108,7 +108,7 @@ export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
               {/* JSON Export */}
               <div className="space-y-2">
                 <h3 className="font-bold text-sm uppercase flex items-center gap-2">
-                  <FileJson className="w-4 h-4" /> JSON
+                  <FileJson className="w-4 h-4" /> {t("jsonLabel")}
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
                   <Button 
@@ -132,7 +132,7 @@ export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
               {/* Markdown Export */}
               <div className="space-y-2">
                 <h3 className="font-bold text-sm uppercase flex items-center gap-2">
-                  <FileText className="w-4 h-4" /> Markdown
+                  <FileText className="w-4 h-4" /> {t("markdownLabel")}
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
                   <Button 

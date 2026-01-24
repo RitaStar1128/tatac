@@ -16,7 +16,7 @@ export interface PWAInstallPromptHandle {
 }
 
 export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const isMobile = useIsMobile();
   const [isPWA, setIsPWA] = useState(false);
   const [showBanner, setShowBanner] = useState(false);
@@ -92,15 +92,13 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                 <div className="flex flex-col items-center gap-2">
                   <Smartphone className="w-12 h-12 text-foreground" strokeWidth={2} />
                   <h2 className="text-2xl font-black uppercase tracking-tighter">
-                    {language === 'ja' ? 'スマホでの利用を推奨' : 'Mobile Recommended'}
+                    {t("pwaMobileRecommendedTitle")}
                   </h2>
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-6 modal-scroll">
                 <p className="text-sm font-bold text-muted-foreground">
-                  {language === 'ja' 
-                    ? 'このアプリはスマートフォンでの利用に最適化されています。以下のQRコードを読み取ってアクセスしてください。' 
-                    : 'This app is optimized for mobile use. Scan the QR code below to access on your phone.'}
+                  {t("pwaMobileRecommendedBody")}
                 </p>
                 
                 <div className="bg-white p-4 border-2 border-black inline-block">
@@ -143,7 +141,7 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                   }}
                   className="bg-background text-foreground border-2 border-background hover:bg-accent hover:text-accent-foreground font-bold rounded-none"
                 >
-                  {language === 'ja' ? '追加方法' : 'How to'}
+                  {t("pwaHowToButton")}
                 </Button>
                 <button 
                   onClick={handleDismissBanner}
@@ -179,7 +177,7 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                   <span className="bg-foreground text-background px-2 py-1">
                     <Smartphone className="w-4 h-4" />
                   </span>
-                  {language === 'ja' ? 'ホーム画面への追加' : 'Add to Home'}
+                  {t("pwaAddToHomeTitle")}
                 </h2>
                 <Button
                   variant="ghost"
@@ -202,7 +200,7 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                         : "bg-transparent text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    iPhone (iOS)
+                    {t("pwaTabIos")}
                   </button>
                   <button
                     onClick={() => setActivePlatform("android")}
@@ -212,7 +210,7 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                         : "bg-transparent text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    Android
+                    {t("pwaTabAndroid")}
                   </button>
                 </div>
 
@@ -223,24 +221,24 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                       <div className="space-y-4 pl-2">
                         <Step 
                           number={1} 
-                          text={language === 'ja' ? 'Safariでこのページを開きます。' : 'Open this page in Safari.'} 
-                          icon={<Monitor className="w-5 h-5" />}
-                        />
-                        <Step 
-                          number={2} 
-                          text={language === 'ja' ? '画面下部の「共有」ボタンをタップします。' : 'Tap the "Share" button at the bottom.'} 
-                          icon={<Share className="w-5 h-5" />}
-                        />
-                        <Step 
-                          number={3} 
-                          text={language === 'ja' ? 'メニューをスクロールして「ホーム画面に追加」を選択します。' : 'Scroll down and select "Add to Home Screen".'} 
-                          icon={<PlusSquare className="w-5 h-5" />}
-                        />
-                        <Step 
-                          number={4} 
-                          text={language === 'ja' ? '右上の「追加」をタップして完了です。' : 'Tap "Add" in the top right corner.'} 
-                          isLast
-                        />
+                        text={t("pwaIosStep1")} 
+                        icon={<Monitor className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={2} 
+                        text={t("pwaIosStep2")} 
+                        icon={<Share className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={3} 
+                        text={t("pwaIosStep3")} 
+                        icon={<PlusSquare className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={4} 
+                        text={t("pwaIosStep4")} 
+                        isLast
+                      />
                       </div>
                     </div>
                   ) : (
@@ -249,24 +247,24 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                       <div className="space-y-4 pl-2">
                         <Step 
                           number={1} 
-                          text={language === 'ja' ? 'Chromeでこのページを開きます。' : 'Open this page in Chrome.'} 
-                          icon={<Monitor className="w-5 h-5" />}
-                        />
-                        <Step 
-                          number={2} 
-                          text={language === 'ja' ? '右上のメニューアイコン（︙）をタップします。' : 'Tap the menu icon (︙) in the top right.'} 
-                          icon={<MoreVertical className="w-5 h-5" />}
-                        />
-                        <Step 
-                          number={3} 
-                          text={language === 'ja' ? '「ホーム画面に追加」または「アプリをインストール」を選択します。' : 'Select "Add to Home screen" or "Install app".'} 
-                          icon={<Smartphone className="w-5 h-5" />}
-                        />
-                        <Step 
-                          number={4} 
-                          text={language === 'ja' ? '確認画面で「追加」をタップして完了です。' : 'Tap "Add" to confirm.'} 
-                          isLast
-                        />
+                        text={t("pwaAndroidStep1")} 
+                        icon={<Monitor className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={2} 
+                        text={t("pwaAndroidStep2")} 
+                        icon={<MoreVertical className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={3} 
+                        text={t("pwaAndroidStep3")} 
+                        icon={<Smartphone className="w-5 h-5" />}
+                      />
+                      <Step 
+                        number={4} 
+                        text={t("pwaAndroidStep4")} 
+                        isLast
+                      />
                       </div>
                     </div>
                   )}

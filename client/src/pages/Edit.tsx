@@ -142,7 +142,7 @@ export default function Edit() {
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="font-black text-lg tracking-tight uppercase">
-            EDIT MODE
+            {t("editMode")}
           </h1>
         </div>
         

@@ -7,12 +7,14 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
+  const { t } = useLanguage();
   return (
     <nav
       role="navigation"
-      aria-label="pagination"
+      aria-label={t("ariaPagination")}
       data-slot="pagination"
       className={cn("mx-auto flex w-full justify-center", className)}
       {...props}
@@ -69,15 +71,16 @@ function PaginationPrevious({
   className,
   ...props
 }: React.ComponentProps<typeof PaginationLink>) {
+  const { t } = useLanguage();
   return (
     <PaginationLink
-      aria-label="Go to previous page"
+      aria-label={t("paginationPrevLabel")}
       size="default"
       className={cn("gap-1 px-2.5 sm:pl-2.5", className)}
       {...props}
     >
       <ChevronLeftIcon />
-      <span className="hidden sm:block">Previous</span>
+      <span className="hidden sm:block">{t("paginationPrevious")}</span>
     </PaginationLink>
   );
 }
@@ -86,14 +89,15 @@ function PaginationNext({
   className,
   ...props
 }: React.ComponentProps<typeof PaginationLink>) {
+  const { t } = useLanguage();
   return (
     <PaginationLink
-      aria-label="Go to next page"
+      aria-label={t("paginationNextLabel")}
       size="default"
       className={cn("gap-1 px-2.5 sm:pr-2.5", className)}
       {...props}
     >
-      <span className="hidden sm:block">Next</span>
+      <span className="hidden sm:block">{t("paginationNext")}</span>
       <ChevronRightIcon />
     </PaginationLink>
   );
@@ -103,6 +107,7 @@ function PaginationEllipsis({
   className,
   ...props
 }: React.ComponentProps<"span">) {
+  const { t } = useLanguage();
   return (
     <span
       aria-hidden
@@ -111,7 +116,7 @@ function PaginationEllipsis({
       {...props}
     >
       <MoreHorizontalIcon className="size-4" />
-      <span className="sr-only">More pages</span>
+      <span className="sr-only">{t("paginationMore")}</span>
     </span>
   );
 }
