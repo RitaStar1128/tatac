@@ -193,17 +193,6 @@ const plugins = [
       globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
       // Exclude large image files from precaching to avoid build errors
       globIgnores: [
-        '**/images/original-icon.png',
-        '**/images/ogp-generated.png',
-        '**/images/icon-spending_original.png',
-        '**/images/icon-spending.png',
-        '**/images/icon-sakukiro.png',
-        '**/images/icon-sakukiro-noborder.png',
-        '**/images/icon-sakukiro-dark.png',
-        '**/images/icon-history_original.png',
-        '**/images/icon-history.png',
-        '**/images/bg-pattern_original.png',
-        '**/images/bg-pattern.png',
         '**/images/icon-tatac-generated.png',
         '**/images/ogp-tatac-generated.png'
       ],
