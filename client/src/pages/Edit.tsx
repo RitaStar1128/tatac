@@ -12,6 +12,7 @@ import { motion } from "framer-motion";
 // - mode_awareness: ヘッダーの色を反転（黒背景）させることで、編集モードであることを明確に伝える。
 // - consistency: メイン画面と同様の入力体験を提供しつつ、保存アクションを明確にする。
 // - feedback: 保存完了時にトーストと振動でフィードバックを行い、操作の完了を伝える。
+// - mobile_optimization: モバイル版では保存ボタンを固定配置（fixed）にし、キーボード表示時でも常にアクセス可能にする。
 
 interface Record {
   id: string;
@@ -145,17 +146,17 @@ export default function Edit() {
           spellCheck={false}
         />
         
-        {/* Mobile Save Button (Floating) */}
+        {/* Mobile Save Button (Fixed Position) */}
         {isMobile && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="absolute bottom-4 right-4 z-20"
+            className="fixed bottom-4 right-4 z-50"
           >
             <Button
               onClick={handleSave}
               size="lg"
-              className="rounded-full w-14 h-14 shadow-none border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold text-xs flex flex-col items-center justify-center gap-0.5"
+              className="rounded-full w-14 h-14 shadow-xl border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold text-xs flex flex-col items-center justify-center gap-0.5"
             >
               <Save className="w-5 h-5" />
             </Button>
