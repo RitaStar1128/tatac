@@ -1,13 +1,13 @@
 {
-  "name": "サクキロ (SAKUKIRO)",
-  "short_name": "サクキロ",
-  "description": "アプリを開いた瞬間に記録完了。シンプルで高速な支出管理アプリ「サクキロ」で、日々の買い物をスマートに記録しよう。",
+  "name": "TATAC",
+  "short_name": "TATAC",
+  "description": "Reflex Input Memo App for Instant Thought Capture",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#ff5e00",
+  "theme_color": "#000000",
   "orientation": "portrait",
-  "categories": ["finance", "productivity", "utilities"],
+  "categories": ["productivity", "utilities", "notes"],
   "icons": [
     {
       "src": "/images/icon-sakukiro-final.png",
@@ -34,14 +34,14 @@
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "ホーム画面"
+      "label": "Home Screen"
     },
     {
       "src": "/images/screenshot-mobile-2.png",
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "履歴画面"
+      "label": "History Screen"
     }
   ]
 }
