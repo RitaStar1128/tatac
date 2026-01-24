@@ -139,9 +139,10 @@ export default function Home() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b-2 border-foreground shrink-0 z-10 bg-background">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-foreground text-background flex items-center justify-center font-black text-lg select-none">
+          {/* H1 for SEO, styled as logo */}
+          <h1 className="w-8 h-8 bg-foreground text-background flex items-center justify-center font-black text-lg select-none cursor-default">
             T
-          </div>
+          </h1>
           <Button
             variant="ghost"
             size="icon"
@@ -188,6 +189,9 @@ export default function Home() {
 
       {/* Main Input Area */}
       <main className="flex-1 relative flex flex-col">
+        {/* Hidden H2 for SEO structure */}
+        <h2 className="sr-only">New Memo Input</h2>
+        
         <Textarea
           ref={textareaRef}
           value={text}
