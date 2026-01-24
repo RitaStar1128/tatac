@@ -146,14 +146,16 @@ export default function Edit() {
           </h1>
         </div>
         
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleSave}
-          className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors"
-        >
-          <Save className="w-5 h-5" />
-        </Button>
+        {!isMobile && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleSave}
+            className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors"
+          >
+            <Save className="w-5 h-5" />
+          </Button>
+        )}
       </header>
 
       {/* Main Input Area */}
