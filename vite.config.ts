@@ -203,7 +203,9 @@ const plugins = [
         '**/images/icon-history_original.png',
         '**/images/icon-history.png',
         '**/images/bg-pattern_original.png',
-        '**/images/bg-pattern.png'
+        '**/images/bg-pattern.png',
+        '**/images/icon-tatac-generated.png',
+        '**/images/ogp-tatac-generated.png'
       ],
       runtimeCaching: [
         {

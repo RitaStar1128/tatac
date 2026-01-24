@@ -10,20 +10,14 @@
   "categories": ["productivity", "utilities", "notes"],
   "icons": [
     {
-      "src": "/images/icon-sakukiro-final.png",
-      "sizes": "192x192",
+      "src": "/images/icon-tatac-generated.png",
+      "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/images/icon-sakukiro-final.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/images/icon-sakukiro-final.png",
-      "sizes": "512x512",
+      "src": "/images/icon-tatac-generated.png",
+      "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "maskable"
     }
