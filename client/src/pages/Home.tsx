@@ -79,27 +79,25 @@ export default function Home() {
       return;
     }
 
-    // PC: Ctrl+Enter for new line, Enter to save
+    // PC: Shift+Enter to save, Enter for new line
     if (e.key === "Enter") {
-      if (e.ctrlKey || e.metaKey) {
-        // Allow new line
-        return;
+      if (e.shiftKey) {
+        // Shift+Enter: Save
+        e.preventDefault();
+        
+        // Prevent accidental double saves or rapid firing
+        if (pendingEnterRef.current) return;
+        
+        if (text.trim()) {
+          pendingEnterRef.current = true;
+          saveMemo();
+          // Reset pending flag after a short delay
+          setTimeout(() => {
+            pendingEnterRef.current = false;
+          }, 500);
+        }
       }
-      
-      // Prevent default Enter behavior (new line) and save
-      e.preventDefault();
-      
-      // Prevent accidental double saves or rapid firing
-      if (pendingEnterRef.current) return;
-      
-      if (text.trim()) {
-        pendingEnterRef.current = true;
-        saveMemo();
-        // Reset pending flag after a short delay
-        setTimeout(() => {
-          pendingEnterRef.current = false;
-        }, 500);
-      }
+      // Enter only: New line (default behavior)
     }
   };
 
@@ -148,19 +146,19 @@ export default function Home() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsSettingsOpen(true)}
+            onClick={() => setLocation("/history")}
             className="rounded-none hover:bg-muted transition-colors"
           >
-            <Settings className="w-5 h-5" />
+            <History className="w-5 h-5" />
           </Button>
           
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setLocation("/history")}
+            onClick={() => setIsSettingsOpen(true)}
             className="rounded-none hover:bg-muted transition-colors"
           >
-            <History className="w-5 h-5" />
+            <Settings className="w-5 h-5" />
           </Button>
         </div>
       </header>
