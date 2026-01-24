@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { History, Settings, Smartphone, HelpCircle } from "lucide-react";
+import { History, Settings, Smartphone, HelpCircle, Save } from "lucide-react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +15,7 @@ import { toast } from "sonner";
 // - distraction_free_mode: 入力時はヘッダー以外の要素を極力排除し、書くことに集中させる。
 // - auto_save: ユーザーが保存操作を意識せずとも、思考を途切れさせないように自動保存（Enter/閉じる）を行う。
 // - haptic_feedback: 保存完了時に微細な振動を与えることで、完了した感覚を身体的にフィードバックする（モバイル）。
+// - mobile_optimization: モバイル版では保存ボタンを固定配置（fixed）にし、Visual Viewport APIを用いてキーボードの上に追従させる。
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -27,6 +28,9 @@ export default function Home() {
   const pwaPromptRef = useRef<PWAInstallPromptHandle>(null);
   const pendingEnterRef = useRef(false);
   const [isPWA, setIsPWA] = useState(false);
+  
+  // Visual Viewport height for keyboard avoidance
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   useEffect(() => {
     // Check if running as PWA
@@ -45,6 +49,24 @@ export default function Home() {
     if (!hasVisited) {
       setIsDescriptionOpen(true);
       localStorage.setItem("tatac_visited", "true");
+    }
+
+    // Visual Viewport API for keyboard avoidance
+    if (window.visualViewport) {
+      const handleResize = () => {
+        setViewportHeight(window.visualViewport?.height || window.innerHeight);
+      };
+      
+      window.visualViewport.addEventListener('resize', handleResize);
+      window.visualViewport.addEventListener('scroll', handleResize);
+      
+      // Initial set
+      handleResize();
+      
+      return () => {
+        window.visualViewport?.removeEventListener('resize', handleResize);
+        window.visualViewport?.removeEventListener('scroll', handleResize);
+      };
     }
   }, []);
 
@@ -176,20 +198,28 @@ export default function Home() {
           spellCheck={false}
         />
         
-        {/* Mobile Save Button (Floating) */}
+        {/* Mobile Save Button (Fixed Position with Visual Viewport support) */}
         {isMobile && text.trim().length > 0 && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="absolute bottom-4 right-4 z-20"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            style={{
+              position: 'fixed',
+              left: 'auto',
+              right: '1rem',
+              // Dynamically adjust bottom position based on visual viewport
+              top: viewportHeight ? `${viewportHeight - 80}px` : 'auto',
+              bottom: viewportHeight ? 'auto' : '1rem',
+            }}
+            className="z-50"
           >
             <Button
               onClick={handleMobileSave}
               size="lg"
-              className="rounded-full w-14 h-14 shadow-none border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold text-xs flex flex-col items-center justify-center gap-0.5"
+              className="rounded-full w-14 h-14 shadow-xl border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold flex items-center justify-center"
             >
-              <span>SAVE</span>
+              <Save className="w-6 h-6" />
             </Button>
           </motion.div>
         )}

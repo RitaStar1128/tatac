@@ -12,7 +12,7 @@ import { motion } from "framer-motion";
 // - mode_awareness: ヘッダーの色を反転（黒背景）させることで、編集モードであることを明確に伝える。
 // - consistency: メイン画面と同様の入力体験を提供しつつ、保存アクションを明確にする。
 // - feedback: 保存完了時にトーストと振動でフィードバックを行い、操作の完了を伝える。
-// - mobile_optimization: モバイル版では保存ボタンを固定配置（fixed）にし、キーボード表示時でも常にアクセス可能にする。
+// - mobile_optimization: モバイル版では保存ボタンを固定配置（fixed）にし、Visual Viewport APIを用いてキーボードの上に追従させる。
 
 interface Record {
   id: string;
@@ -30,6 +30,9 @@ export default function Edit() {
   const [originalRecord, setOriginalRecord] = useState<Record | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingEnterRef = useRef(false);
+
+  // Visual Viewport height for keyboard avoidance
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   useEffect(() => {
     if (params?.id) {
@@ -56,6 +59,24 @@ export default function Edit() {
           textareaRef.current.value.length
         );
       }, 100);
+    }
+
+    // Visual Viewport API for keyboard avoidance
+    if (window.visualViewport) {
+      const handleResize = () => {
+        setViewportHeight(window.visualViewport?.height || window.innerHeight);
+      };
+      
+      window.visualViewport.addEventListener('resize', handleResize);
+      window.visualViewport.addEventListener('scroll', handleResize);
+      
+      // Initial set
+      handleResize();
+      
+      return () => {
+        window.visualViewport?.removeEventListener('resize', handleResize);
+        window.visualViewport?.removeEventListener('scroll', handleResize);
+      };
     }
   }, [originalRecord]);
 
@@ -146,19 +167,27 @@ export default function Edit() {
           spellCheck={false}
         />
         
-        {/* Mobile Save Button (Fixed Position) */}
+        {/* Mobile Save Button (Fixed Position with Visual Viewport support) */}
         {isMobile && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="fixed bottom-4 right-4 z-50"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            style={{
+              position: 'fixed',
+              left: 'auto',
+              right: '1rem',
+              // Dynamically adjust bottom position based on visual viewport
+              top: viewportHeight ? `${viewportHeight - 80}px` : 'auto',
+              bottom: viewportHeight ? 'auto' : '1rem',
+            }}
+            className="z-50"
           >
             <Button
               onClick={handleSave}
               size="lg"
-              className="rounded-full w-14 h-14 shadow-xl border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold text-xs flex flex-col items-center justify-center gap-0.5"
+              className="rounded-full w-14 h-14 shadow-xl border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold flex items-center justify-center"
             >
-              <Save className="w-5 h-5" />
+              <Save className="w-6 h-6" />
             </Button>
           </motion.div>
         )}
