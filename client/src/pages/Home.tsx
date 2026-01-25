@@ -140,8 +140,13 @@ export default function Home() {
       <header className="flex items-center justify-between px-4 py-3 border-b-2 border-foreground shrink-0 z-10 bg-background">
         <div className="flex items-center gap-3">
           {/* H1 for SEO, styled as logo */}
-          <h1 className="w-8 h-8 bg-foreground text-background flex items-center justify-center font-black text-lg select-none cursor-default">
-            T
+          <h1 className="flex items-center gap-2 font-black text-lg tracking-tight uppercase select-none cursor-default">
+            <img
+              src="/images/icon-tatac-generated.png"
+              alt="TATAC app icon"
+              className="w-8 h-8 rounded-none"
+            />
+            <span>TATAC</span>
           </h1>
           <Button
             variant="ghost"
