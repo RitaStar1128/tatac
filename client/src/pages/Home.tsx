@@ -15,7 +15,7 @@ import { toast } from "sonner";
 // - distraction_free_mode: 入力時はヘッダー以外の要素を極力排除し、書くことに集中させる。
 // - auto_save: ユーザーが保存操作を意識せずとも、思考を途切れさせないように自動保存（Enter/閉じる）を行う。
 // - haptic_feedback: 保存完了時に微細な振動を与えることで、完了した感覚を身体的にフィードバックする（モバイル）。
-// - mobile_optimization: モバイル版では保存ボタンを固定配置（fixed）にし、Visual Viewport APIを用いてキーボードの上に追従させる。
+// - mobile_optimization: モバイル版では保存ボタンを固定配置（fixed）にし、interactive-widget=resizes-contentによりキーボードの上に自然に配置させる。
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -29,9 +29,6 @@ export default function Home() {
   const pendingEnterRef = useRef(false);
   const [isPWA, setIsPWA] = useState(false);
   
-  // Visual Viewport height for keyboard avoidance
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-
   useEffect(() => {
     // Check if running as PWA
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
@@ -49,24 +46,6 @@ export default function Home() {
     if (!hasVisited) {
       setIsDescriptionOpen(true);
       localStorage.setItem("tatac_visited", "true");
-    }
-
-    // Visual Viewport API for keyboard avoidance
-    if (window.visualViewport) {
-      const handleResize = () => {
-        setViewportHeight(window.visualViewport?.height || window.innerHeight);
-      };
-      
-      window.visualViewport.addEventListener('resize', handleResize);
-      window.visualViewport.addEventListener('scroll', handleResize);
-      
-      // Initial set
-      handleResize();
-      
-      return () => {
-        window.visualViewport?.removeEventListener('resize', handleResize);
-        window.visualViewport?.removeEventListener('scroll', handleResize);
-      };
     }
   }, []);
 
@@ -207,21 +186,13 @@ export default function Home() {
           spellCheck={false}
         />
         
-        {/* Mobile Save Button (Fixed Position with Visual Viewport support) */}
+        {/* Mobile Save Button (Fixed Position relying on interactive-widget=resizes-content) */}
         {isMobile && text.trim().length > 0 && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            style={{
-              position: 'fixed',
-              left: 'auto',
-              right: '1rem',
-              // Dynamically adjust bottom position based on visual viewport
-              top: viewportHeight ? `${viewportHeight - 80}px` : 'auto',
-              bottom: viewportHeight ? 'auto' : '1rem',
-            }}
-            className="z-50"
+            className="fixed right-4 bottom-4 z-50"
           >
             <Button
               onClick={handleMobileSave}
