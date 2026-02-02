@@ -22,6 +22,11 @@ function Router() {
 }
 
 function App() {
+  // Set document title for SEO (30-60 characters)
+  if (typeof document !== 'undefined') {
+    document.title = "TATAC - Reflex Input Memo App for Instant Thought Capture";
+  }
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
