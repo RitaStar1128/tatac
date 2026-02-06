@@ -190,6 +190,8 @@ const plugins = [
       ]
     },
     workbox: {
+      // Allow large icon assets in precache (default is 2 MiB).
+      maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
       // Exclude large image files from precaching to avoid build errors
       globIgnores: [
