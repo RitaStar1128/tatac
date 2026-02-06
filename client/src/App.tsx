@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
+import { ReloadPrompt } from "@/components/ReloadPrompt";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
@@ -21,12 +22,18 @@ function Router() {
 }
 
 function App() {
+  // Set document title for SEO (30-60 characters)
+  if (typeof document !== 'undefined') {
+    document.title = "TATAC - Reflex Input Memo App for Instant Thought Capture";
+  }
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light">
         <LanguageProvider>
           <TooltipProvider>
             <Toaster />
+            <ReloadPrompt />
             <Router />
           </TooltipProvider>
         </LanguageProvider>
