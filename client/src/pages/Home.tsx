@@ -9,6 +9,7 @@ import { DescriptionModal } from "@/components/DescriptionModal";
 import { PWAInstallPrompt, PWAInstallPromptHandle } from "@/components/PWAInstallPrompt";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useIsMobile } from "@/hooks/useMobile";
+import { getStoredRecords, setStoredRecords, type MemoRecord } from "@/lib/recordsStorage";
 import { toast } from "sonner";
 
 // UX_RATIONALE:
@@ -54,14 +55,20 @@ export default function Home() {
   const saveMemo = () => {
     if (!text.trim()) return;
 
-    const newRecord = {
+    const newRecord: MemoRecord = {
       id: crypto.randomUUID(),
       text: text.trim(),
       date: new Date().toISOString(),
     };
 
-    const existingRecords = JSON.parse(localStorage.getItem("tatac_records") || "[]");
-    localStorage.setItem("tatac_records", JSON.stringify([newRecord, ...existingRecords]));
+    const existingRecords = getStoredRecords();
+    const saved = setStoredRecords([newRecord, ...existingRecords]);
+    if (!saved) {
+      toast.error(t("errorUnexpected"), {
+        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+      });
+      return;
+    }
 
     setText("");
     toast.success(t("saved"), {

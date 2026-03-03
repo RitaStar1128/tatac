@@ -3,9 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLocation } from "wouter";
 import { ArrowLeft, Trash2, Edit2, ShoppingBag, Download, Copy, Search, X } from "lucide-react";
-import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo, useSpring } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { ExportModal } from "@/components/ExportModal";
+import { getStoredRecords, setStoredRecords, type MemoRecord } from "@/lib/recordsStorage";
 import { toast } from "sonner";
 
 // UX_RATIONALE:
@@ -16,12 +17,7 @@ import { toast } from "sonner";
 // - search_accessibility: 履歴が増えた際の検索性を高めるため、ヘッダー直下に検索バーを配置。
 // - instant_feedback: 入力と同時にフィルタリングを行い、即座に結果を表示する。
 
-interface Record {
-  id: string;
-  text: string;
-  date: string;
-  updatedAt?: string;
-}
+type Record = MemoRecord;
 
 // Swipeable Item Component with Advanced Physics
 function HistoryItem({ 
@@ -42,7 +38,6 @@ function HistoryItem({
   const { t } = useLanguage();
   // Motion values for swipe gesture
   const x = useMotionValue(0);
-  const dragX = useSpring(x, { stiffness: 500, damping: 30 }); // Add spring physics to drag
   
   // Dynamic transformations based on swipe distance
   const deleteThreshold = -100;
@@ -184,22 +179,52 @@ export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showTutorial, setShowTutorial] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const pendingDeleteRef = useRef<{ record: Record; index: number } | null>(null);
+  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordsRef = useRef<Record[]>([]);
   const [_, setLocation] = useLocation();
 
-  useEffect(() => {
-    const storedData = localStorage.getItem("tatac_records");
-    if (storedData) {
-      // Sort by date desc
-      const parsed = JSON.parse(storedData).sort((a: Record, b: Record) => 
-        new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-      setRecords(parsed);
-      setFilteredRecords(parsed);
+  const clearUndoTimeout = () => {
+    if (undoTimeoutRef.current) {
+      clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = null;
     }
+  };
+
+  const handleUndoDelete = () => {
+    const pendingDelete = pendingDeleteRef.current;
+    if (!pendingDelete) return;
+
+    const restoredRecords = [...recordsRef.current];
+    const restoreIndex = Math.min(pendingDelete.index, restoredRecords.length);
+    restoredRecords.splice(restoreIndex, 0, pendingDelete.record);
+
+    const saved = setStoredRecords(restoredRecords);
+    if (!saved) {
+      toast.error(t("errorUnexpected"), {
+        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+      });
+      return;
+    }
+
+    setRecords(restoredRecords);
+    recordsRef.current = restoredRecords;
+    pendingDeleteRef.current = null;
+    clearUndoTimeout();
+  };
+
+  useEffect(() => {
+    // Sort by date desc
+    const parsed = getStoredRecords().sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+    setRecords(parsed);
+    setFilteredRecords(parsed);
+    recordsRef.current = parsed;
 
     // Check tutorial status
     const hasSeenTutorial = localStorage.getItem("tatac_swipe_tutorial_seen");
-    if (!hasSeenTutorial && storedData && JSON.parse(storedData).length > 0) {
+    if (!hasSeenTutorial && parsed.length > 0) {
       setShowTutorial(true);
       // Auto dismiss after 3 seconds
       setTimeout(() => {
@@ -207,9 +232,14 @@ export default function HistoryPage() {
         localStorage.setItem("tatac_swipe_tutorial_seen", "true");
       }, 3000);
     }
+
+    return () => {
+      clearUndoTimeout();
+    };
   }, []);
 
   useEffect(() => {
+    recordsRef.current = records;
     if (!searchQuery.trim()) {
       setFilteredRecords(records);
       return;
@@ -223,9 +253,37 @@ export default function HistoryPage() {
   }, [searchQuery, records]);
 
   const handleDelete = (id: string) => {
+    const deleteIndex = records.findIndex((r) => r.id === id);
+    if (deleteIndex === -1) return;
+    const deletedRecord = records[deleteIndex];
+
     const newRecords = records.filter((r) => r.id !== id);
+    const saved = setStoredRecords(newRecords);
+    if (!saved) {
+      toast.error(t("errorUnexpected"), {
+        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+      });
+      return;
+    }
+
     setRecords(newRecords);
-    localStorage.setItem("tatac_records", JSON.stringify(newRecords));
+    recordsRef.current = newRecords;
+    pendingDeleteRef.current = { record: deletedRecord, index: deleteIndex };
+    clearUndoTimeout();
+    undoTimeoutRef.current = setTimeout(() => {
+      pendingDeleteRef.current = null;
+      undoTimeoutRef.current = null;
+    }, 5000);
+
+    toast(t("delete"), {
+      duration: 5000,
+      action: {
+        label: t("undo"),
+        onClick: handleUndoDelete,
+      },
+      className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
+    });
+
     // Stronger haptic feedback on delete
     if (navigator.vibrate) {
       navigator.vibrate([50, 30, 50]);

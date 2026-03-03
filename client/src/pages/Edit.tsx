@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useIsMobile } from "@/hooks/useMobile";
+import { getStoredRecords, setStoredRecords, type MemoRecord } from "@/lib/recordsStorage";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 
@@ -14,28 +15,27 @@ import { motion } from "framer-motion";
 // - feedback: 保存完了時にトーストと振動でフィードバックを行い、操作の完了を伝える。
 // - mobile_optimization: モバイル版では保存ボタンを固定配置（fixed）にし、interactive-widget=resizes-contentによりキーボードの上に自然に配置させる。
 
-interface Record {
-  id: string;
-  text: string;
-  date: string;
-  updatedAt?: string;
-}
-
 export default function Edit() {
   const [, params] = useRoute("/edit/:id");
   const [, setLocation] = useLocation();
   const { t } = useLanguage();
   const isMobile = useIsMobile();
   const [text, setText] = useState("");
-  const [originalRecord, setOriginalRecord] = useState<Record | null>(null);
+  const [originalRecord, setOriginalRecord] = useState<MemoRecord | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingEnterRef = useRef(false);
   const mobileSaveButtonClearance = "calc(10rem + env(safe-area-inset-bottom))";
+  const normalizedText = text.trim();
+  const normalizedOriginalText = originalRecord?.text.trim() ?? "";
+  const canSave =
+    !!originalRecord &&
+    normalizedText.length > 0 &&
+    normalizedText !== normalizedOriginalText;
 
   useEffect(() => {
     if (params?.id) {
-      const storedRecords = JSON.parse(localStorage.getItem("tatac_records") || "[]");
-      const record = storedRecords.find((r: Record) => r.id === params.id);
+      const storedRecords = getStoredRecords();
+      const record = storedRecords.find((r) => r.id === params.id);
       if (record) {
         setOriginalRecord(record);
         setText(record.text);
@@ -61,21 +61,27 @@ export default function Edit() {
   }, [originalRecord]);
 
   const handleSave = () => {
-    if (!text.trim() || !originalRecord) return;
+    if (!canSave || !originalRecord) return;
 
-    const storedRecords = JSON.parse(localStorage.getItem("tatac_records") || "[]");
-    const updatedRecords = storedRecords.map((r: Record) => {
+    const storedRecords = getStoredRecords();
+    const updatedRecords = storedRecords.map((r) => {
       if (r.id === originalRecord.id) {
         return {
           ...r,
-          text: text.trim(),
+          text: normalizedText,
           updatedAt: new Date().toISOString()
         };
       }
       return r;
     });
 
-    localStorage.setItem("tatac_records", JSON.stringify(updatedRecords));
+    const saved = setStoredRecords(updatedRecords);
+    if (!saved) {
+      toast.error(t("errorUnexpected"), {
+        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+      });
+      return;
+    }
     
     toast.success(t("saved"), {
       duration: 1500,
@@ -131,7 +137,8 @@ export default function Edit() {
             variant="ghost"
             size="icon"
             onClick={handleSave}
-            className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors"
+            disabled={!canSave}
+            className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Save className="w-5 h-5" />
           </Button>
@@ -147,7 +154,7 @@ export default function Edit() {
           onKeyDown={handleKeyDown}
           className="flex-1 w-full h-full resize-none border-none focus-visible:ring-0 p-6 text-lg md:text-xl leading-relaxed bg-transparent placeholder:text-muted-foreground/30"
           style={
-            isMobile
+            isMobile && canSave
               ? {
                   paddingBottom: mobileSaveButtonClearance,
                   scrollPaddingBottom: mobileSaveButtonClearance,
@@ -158,7 +165,7 @@ export default function Edit() {
         />
         
         {/* Mobile Save Button (Fixed Position relying on interactive-widget=resizes-content) */}
-        {isMobile && (
+        {isMobile && canSave && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
