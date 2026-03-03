@@ -98,9 +98,9 @@ export default function Edit() {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isMobile) return;
 
-    // PC: Shift+Enter to save, Enter for new line
+    // PC: Ctrl+Enter to save, Enter for new line
     if (e.key === "Enter") {
-      if (e.shiftKey) {
+      if (e.ctrlKey) {
         e.preventDefault();
         if (pendingEnterRef.current) return;
         

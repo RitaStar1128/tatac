@@ -89,10 +89,10 @@ export default function Home() {
       return;
     }
 
-    // PC: Shift+Enter to save, Enter for new line
+    // PC: Ctrl+Enter to save, Enter for new line
     if (e.key === "Enter") {
-      if (e.shiftKey) {
-        // Shift+Enter: Save
+      if (e.ctrlKey) {
+        // Ctrl+Enter: Save
         e.preventDefault();
         
         // Prevent accidental double saves or rapid firing
