@@ -30,6 +30,7 @@ export default function Edit() {
   const [originalRecord, setOriginalRecord] = useState<Record | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingEnterRef = useRef(false);
+  const mobileSaveButtonClearance = "calc(10rem + env(safe-area-inset-bottom))";
 
   useEffect(() => {
     if (params?.id) {
@@ -145,6 +146,14 @@ export default function Edit() {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           className="flex-1 w-full h-full resize-none border-none focus-visible:ring-0 p-6 text-lg md:text-xl leading-relaxed bg-transparent placeholder:text-muted-foreground/30"
+          style={
+            isMobile
+              ? {
+                  paddingBottom: mobileSaveButtonClearance,
+                  scrollPaddingBottom: mobileSaveButtonClearance,
+                }
+              : undefined
+          }
           spellCheck={false}
         />
         
@@ -153,7 +162,7 @@ export default function Edit() {
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="fixed right-4 bottom-4 z-50"
+            className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50"
           >
             <Button
               onClick={handleSave}
