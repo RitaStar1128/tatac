@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Download, Copy, Check, FileJson, FileText, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,18 @@ interface ExportModalProps {
 
 export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
   const { t } = useLanguage();
-  const [copied, setCopied] = useState(false);
+  const [copiedFormat, setCopiedFormat] = useState<'json' | 'markdown' | null>(null);
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleCopy = (format: 'json' | 'markdown') => {
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = async (format: 'json' | 'markdown') => {
     let content = '';
     
     if (format === 'json') {
@@ -32,11 +41,20 @@ export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
       }).join('\n---\n\n');
     }
 
-    navigator.clipboard.writeText(content);
-    setCopied(true);
-    toast.success(t("copied"));
-    
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedFormat(format);
+      toast.success(t("copied"));
+
+      if (copiedTimerRef.current) {
+        clearTimeout(copiedTimerRef.current);
+      }
+      copiedTimerRef.current = setTimeout(() => setCopiedFormat(null), 2000);
+    } catch {
+      toast.error(t("copyFailed"), {
+        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+      });
+    }
   };
 
   const handleDownload = (format: 'json' | 'markdown') => {
@@ -116,7 +134,7 @@ export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
                     variant="outline"
                     className="border-2 border-foreground rounded-none font-bold hover:bg-accent"
                   >
-                    {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                    {copiedFormat === 'json' ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
                     {t("copy")}
                   </Button>
                   <Button 
@@ -140,7 +158,7 @@ export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
                     variant="outline"
                     className="border-2 border-foreground rounded-none font-bold hover:bg-accent"
                   >
-                    {copied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                    {copiedFormat === 'markdown' ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
                     {t("copy")}
                   </Button>
                   <Button 
