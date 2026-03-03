@@ -149,7 +149,6 @@ export default function Edit() {
             isMobile
               ? {
                   paddingBottom: "8.5rem",
-                  paddingRight: "6rem",
                   scrollPaddingBottom: "8.5rem",
                 }
               : undefined
