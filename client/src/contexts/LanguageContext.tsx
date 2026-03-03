@@ -34,7 +34,7 @@ const translations: Translations = {
   },
   aboutUsageTitle: { ja: "使い方", en: "HOW TO USE" },
   aboutPcBullet1: { ja: "Enterで改行", en: "Enter for new line" },
-  aboutPcBullet2: { ja: "Ctrl+Enterで保存", en: "Ctrl+Enter to save" },
+  aboutPcBullet2: { ja: "Ctrl/Cmd+Enterで保存", en: "Ctrl/Cmd+Enter to save" },
   aboutPcBullet3: { ja: "履歴で編集・削除", en: "Edit or delete in History" },
   aboutPcBullet4: { ja: "記録は端末内のローカル保存のみ", en: "Saved locally in this browser only" },
   aboutMobileBullet1: { ja: "Enterで改行", en: "Enter for new line" },
