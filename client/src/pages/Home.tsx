@@ -29,6 +29,7 @@ export default function Home() {
   const pendingEnterRef = useRef(false);
   const [isPWA, setIsPWA] = useState(false);
   const showMobileSaveButton = isMobile && text.trim().length > 0;
+  const mobileSaveButtonClearance = "calc(10rem + env(safe-area-inset-bottom))";
   
   useEffect(() => {
     // Check if running as PWA
@@ -187,8 +188,8 @@ export default function Home() {
           style={
             showMobileSaveButton
               ? {
-                  paddingBottom: "8.5rem",
-                  scrollPaddingBottom: "8.5rem",
+                  paddingBottom: mobileSaveButtonClearance,
+                  scrollPaddingBottom: mobileSaveButtonClearance,
                 }
               : undefined
           }
@@ -201,7 +202,7 @@ export default function Home() {
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
-            className="fixed right-4 bottom-4 z-50"
+            className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50"
           >
             <Button
               onClick={handleMobileSave}

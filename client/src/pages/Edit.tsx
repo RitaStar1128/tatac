@@ -30,6 +30,7 @@ export default function Edit() {
   const [originalRecord, setOriginalRecord] = useState<Record | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingEnterRef = useRef(false);
+  const mobileSaveButtonClearance = "calc(10rem + env(safe-area-inset-bottom))";
 
   useEffect(() => {
     if (params?.id) {
@@ -148,8 +149,8 @@ export default function Edit() {
           style={
             isMobile
               ? {
-                  paddingBottom: "8.5rem",
-                  scrollPaddingBottom: "8.5rem",
+                  paddingBottom: mobileSaveButtonClearance,
+                  scrollPaddingBottom: mobileSaveButtonClearance,
                 }
               : undefined
           }
@@ -161,7 +162,7 @@ export default function Edit() {
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="fixed right-4 bottom-4 z-50"
+            className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50"
           >
             <Button
               onClick={handleSave}
