@@ -28,6 +28,7 @@ export default function Home() {
   const pwaPromptRef = useRef<PWAInstallPromptHandle>(null);
   const pendingEnterRef = useRef(false);
   const [isPWA, setIsPWA] = useState(false);
+  const showMobileSaveButton = isMobile && text.trim().length > 0;
   
   useEffect(() => {
     // Check if running as PWA
@@ -183,11 +184,20 @@ export default function Home() {
           onKeyDown={handleKeyDown}
           placeholder={t("newMemoPlaceholder")}
           className="flex-1 w-full h-full resize-none border-none focus-visible:ring-0 p-6 text-lg md:text-xl leading-relaxed bg-transparent placeholder:text-muted-foreground/30"
+          style={
+            showMobileSaveButton
+              ? {
+                  paddingBottom: "8.5rem",
+                  paddingRight: "6rem",
+                  scrollPaddingBottom: "8.5rem",
+                }
+              : undefined
+          }
           spellCheck={false}
         />
         
         {/* Mobile Save Button (Fixed Position relying on interactive-widget=resizes-content) */}
-        {isMobile && text.trim().length > 0 && (
+        {showMobileSaveButton && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}

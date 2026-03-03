@@ -145,6 +145,15 @@ export default function Edit() {
           onChange={(e) => setText(e.target.value)}
           onKeyDown={handleKeyDown}
           className="flex-1 w-full h-full resize-none border-none focus-visible:ring-0 p-6 text-lg md:text-xl leading-relaxed bg-transparent placeholder:text-muted-foreground/30"
+          style={
+            isMobile
+              ? {
+                  paddingBottom: "8.5rem",
+                  paddingRight: "6rem",
+                  scrollPaddingBottom: "8.5rem",
+                }
+              : undefined
+          }
           spellCheck={false}
         />
         
