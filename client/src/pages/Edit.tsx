@@ -60,8 +60,14 @@ export default function Edit() {
     }
   }, [originalRecord]);
 
-  const handleSave = () => {
-    if (!canSave || !originalRecord) return;
+  const saveEdit = ({
+    silent = false,
+    navigate = true,
+  }: {
+    silent?: boolean;
+    navigate?: boolean;
+  } = {}) => {
+    if (!canSave || !originalRecord) return false;
 
     const storedRecords = getStoredRecords();
     const updatedRecords = storedRecords.map((r) => {
@@ -77,40 +83,73 @@ export default function Edit() {
 
     const saved = setStoredRecords(updatedRecords);
     if (!saved) {
-      toast.error(t("errorUnexpected"), {
-        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
-      });
-      return;
+      if (!silent) {
+        toast.error(t("errorUnexpected"), {
+          className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+        });
+      }
+      return false;
     }
     
-    toast.success(t("saved"), {
-      duration: 1500,
-      className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
-    });
+    if (!silent) {
+      toast.success(t("saved"), {
+        duration: 1500,
+        className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
+      });
 
-    if (navigator.vibrate) {
-      navigator.vibrate(50);
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
     }
 
-    setLocation("/history");
+    if (navigate) {
+      setLocation("/history");
+    }
+
+    return true;
   };
+
+  const handleSave = () => {
+    saveEdit();
+  };
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        saveEdit({ silent: true, navigate: false });
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      saveEdit({ silent: true, navigate: false });
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [canSave, normalizedText, originalRecord]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isMobile) return;
 
-    // PC: Ctrl+Enter to save, Enter for new line
-    if (e.key === "Enter") {
-      if (e.ctrlKey) {
-        e.preventDefault();
-        if (pendingEnterRef.current) return;
-        
-        pendingEnterRef.current = true;
-        handleSave();
-        setTimeout(() => {
-          pendingEnterRef.current = false;
-        }, 500);
-      }
-      // Default Enter behavior is new line
+    const isModifierPressed = e.ctrlKey || e.metaKey;
+    const isSaveShortcut =
+      (e.key === "Enter" && isModifierPressed) ||
+      (e.key.toLowerCase() === "s" && isModifierPressed);
+
+    if (isSaveShortcut) {
+      e.preventDefault();
+      if (pendingEnterRef.current) return;
+
+      pendingEnterRef.current = true;
+      handleSave();
+      setTimeout(() => {
+        pendingEnterRef.current = false;
+      }, 500);
     }
   };
 
@@ -122,7 +161,14 @@ export default function Edit() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setLocation("/history")}
+            onClick={() => {
+              if (canSave) {
+                const saved = saveEdit();
+                if (!saved) return;
+                return;
+              }
+              setLocation("/history");
+            }}
             className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />

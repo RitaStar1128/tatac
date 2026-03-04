@@ -28,6 +28,7 @@ export default function Home() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pwaPromptRef = useRef<PWAInstallPromptHandle>(null);
   const pendingEnterRef = useRef(false);
+  const textRef = useRef(text);
   const [isPWA, setIsPWA] = useState(false);
   const showMobileSaveButton = isMobile && text.trim().length > 0;
   const mobileSaveButtonClearance = "calc(10rem + env(safe-area-inset-bottom))";
@@ -52,36 +53,85 @@ export default function Home() {
     }
   }, []);
 
-  const saveMemo = () => {
-    if (!text.trim()) return;
+  useEffect(() => {
+    textRef.current = text;
+  }, [text]);
+
+  const saveMemo = ({ silent = false }: { silent?: boolean } = {}) => {
+    const trimmedText = text.trim();
+    if (!trimmedText) return false;
 
     const newRecord: MemoRecord = {
       id: crypto.randomUUID(),
-      text: text.trim(),
+      text: trimmedText,
       date: new Date().toISOString(),
     };
 
     const existingRecords = getStoredRecords();
     const saved = setStoredRecords([newRecord, ...existingRecords]);
     if (!saved) {
-      toast.error(t("errorUnexpected"), {
-        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
-      });
-      return;
+      if (!silent) {
+        toast.error(t("errorUnexpected"), {
+          className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+        });
+      }
+      return false;
     }
 
+    textRef.current = "";
     setText("");
-    toast.success(t("saved"), {
-      duration: 1500,
-      position: "bottom-center",
-      className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
-    });
+    if (!silent) {
+      toast.success(t("saved"), {
+        duration: 1500,
+        position: "bottom-center",
+        className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
+      });
+    }
     
     // Haptic feedback if available
-    if (navigator.vibrate) {
+    if (!silent && navigator.vibrate) {
       navigator.vibrate(50);
     }
+
+    return true;
   };
+
+  useEffect(() => {
+    const flushMemoSilently = () => {
+      const trimmedText = textRef.current.trim();
+      if (!trimmedText) return;
+
+      const newRecord: MemoRecord = {
+        id: crypto.randomUUID(),
+        text: trimmedText,
+        date: new Date().toISOString(),
+      };
+      const existingRecords = getStoredRecords();
+      const saved = setStoredRecords([newRecord, ...existingRecords]);
+      if (saved) {
+        textRef.current = "";
+        setText("");
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushMemoSilently();
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      flushMemoSilently();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (isMobile) {
@@ -89,25 +139,25 @@ export default function Home() {
       return;
     }
 
-    // PC: Ctrl+Enter to save, Enter for new line
-    if (e.key === "Enter") {
-      if (e.ctrlKey) {
-        // Ctrl+Enter: Save
-        e.preventDefault();
-        
-        // Prevent accidental double saves or rapid firing
-        if (pendingEnterRef.current) return;
-        
-        if (text.trim()) {
-          pendingEnterRef.current = true;
-          saveMemo();
-          // Reset pending flag after a short delay
-          setTimeout(() => {
-            pendingEnterRef.current = false;
-          }, 500);
-        }
+    const isModifierPressed = e.ctrlKey || e.metaKey;
+    const isSaveShortcut =
+      (e.key === "Enter" && isModifierPressed) ||
+      (e.key.toLowerCase() === "s" && isModifierPressed);
+
+    if (isSaveShortcut) {
+      e.preventDefault();
+
+      // Prevent accidental double saves or rapid firing
+      if (pendingEnterRef.current) return;
+
+      if (text.trim()) {
+        pendingEnterRef.current = true;
+        saveMemo();
+        // Reset pending flag after a short delay
+        setTimeout(() => {
+          pendingEnterRef.current = false;
+        }, 500);
       }
-      // Enter only: New line (default behavior)
     }
   };
 
@@ -171,7 +221,13 @@ export default function Home() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setLocation("/history")}
+            onClick={() => {
+              if (text.trim()) {
+                const saved = saveMemo();
+                if (!saved) return;
+              }
+              setLocation("/history");
+            }}
             className="rounded-none hover:bg-muted transition-colors"
           >
             <History className="w-5 h-5" />
