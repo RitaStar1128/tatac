@@ -199,7 +199,8 @@ const plugins = [
       // Exclude large image files from precaching to avoid build errors
       globIgnores: [
         '**/images/icon-tatac-generated.png',
-        '**/images/ogp-tatac-generated.png'
+        '**/images/ogp-tatac-generated.png',
+        '**/images/ogp-tatac-generated-v2.png'
       ],
       runtimeCaching: [
         {
