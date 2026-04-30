@@ -12,8 +12,8 @@ import {
 } from "@/domains/notes/noteRepository";
 
 import { decryptEnvelopeToNoteOp, encryptNoteOpToEnvelope } from "./syncCrypto";
-import { getSyncSessionSecret } from "./sessionSecretStore";
 import { getSyncCursor, setSyncCursor } from "./syncCursorStore";
+import { resolveEffectiveSyncPassphrase } from "./syncSecretResolver";
 import {
   fetchHealth,
   pullEnvelopes,
@@ -50,14 +50,6 @@ export interface ManualImportResult {
   completedAt: string;
 }
 
-function requirePassphrase(): string {
-  const secret = getSyncSessionSecret();
-  if (!secret?.passphrase) {
-    throw new Error("A sync passphrase is required for encryption and decryption.");
-  }
-  return secret.passphrase;
-}
-
 async function getActiveSyncConfig(syncNodeUrlOverride?: string): Promise<ActiveSyncConfig> {
   const config = await getOrCreateSyncConfig();
   const syncNodeUrl = syncNodeUrlOverride?.trim() || config.syncNodeUrl;
@@ -82,7 +74,7 @@ export async function checkSyncNodeHealth(
 }
 
 export async function syncWithNode(): Promise<SyncRunResult> {
-  const passphrase = requirePassphrase();
+  const passphrase = await resolveEffectiveSyncPassphrase();
   const config = await getActiveSyncConfig();
   const health = await fetchHealth(config.syncNodeUrl);
   const registration = await registerDevice(config.syncNodeUrl, {
@@ -159,7 +151,7 @@ export async function syncWithNode(): Promise<SyncRunResult> {
 }
 
 export async function exportTatacSyncFile(): Promise<TatacSyncFile> {
-  const passphrase = requirePassphrase();
+  const passphrase = await resolveEffectiveSyncPassphrase();
   const config = await getOrCreateSyncConfig();
   const allOps = await listAllNoteOpsForUser(config.userId);
   const items = await Promise.all(allOps.map((op) => encryptNoteOpToEnvelope(op, config, passphrase)));
@@ -176,7 +168,7 @@ export async function exportTatacSyncFile(): Promise<TatacSyncFile> {
 }
 
 export async function importTatacSyncFile(file: TatacSyncFile): Promise<ManualImportResult> {
-  const passphrase = requirePassphrase();
+  const passphrase = await resolveEffectiveSyncPassphrase();
   const config = await getOrCreateSyncConfig();
   const parsedFile = tatacSyncFileSchema.parse(file);
 

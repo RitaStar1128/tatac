@@ -5,24 +5,29 @@ import {
   Cable,
   ChevronDown,
   ChevronUp,
-  CircleCheckBig,
-  RadioTower,
-  RefreshCw,
-  Save,
+  MonitorUp,
+  QrCode,
   ShieldCheck,
   TriangleAlert,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
+import { SyncPairingQrModal } from "@/components/SyncPairingQrModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getSyncSessionSecret, setSyncSessionSecret } from "@/domains/sync/sessionSecretStore";
+import { getPersistedSyncSecret, savePersistedSyncSecret } from "@/domains/sync/persistedSyncSecretStore";
+import { setSyncSessionSecret } from "@/domains/sync/sessionSecretStore";
 import { checkSyncNodeHealth, syncWithNode, type SyncRunResult } from "@/domains/sync/syncEngine";
+import {
+  createPairingSessionForMobile,
+  enableSyncOnThisDevice,
+  getDefaultBootstrapUrl,
+} from "@/domains/sync/syncPairing";
 import { getOrCreateSyncConfig, saveSyncSettingsDraft } from "@/domains/sync/syncSettingsStore";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-interface SyncSettingsFormState {
+interface AdvancedFormState {
   userId: string;
   deviceName: string;
   syncNodeUrl: string;
@@ -30,36 +35,20 @@ interface SyncSettingsFormState {
   passphrase: string;
 }
 
-interface SavedSettingsSnapshot {
-  userId: string;
+interface SyncPageState {
+  deviceId: string;
   deviceName: string;
+  userId: string;
   syncNodeUrl: string;
   salt: string;
-}
-
-interface SyncConfigMetaState {
-  deviceId: string;
   nodeId?: string;
-  registeredAt?: string;
   lastSuccessfulSyncAt?: string | null;
+  hasPersistedSecret: boolean;
 }
 
-interface SyncStatusMessage {
+interface StatusMessage {
   tone: "success" | "warning";
   text: string;
-}
-
-function normalizeValue(value: string): string {
-  return value.trim();
-}
-
-function areSettingsEqual(left: SavedSettingsSnapshot, right: SavedSettingsSnapshot): boolean {
-  return (
-    left.userId === right.userId &&
-    left.deviceName === right.deviceName &&
-    left.syncNodeUrl === right.syncNodeUrl &&
-    left.salt === right.salt
-  );
 }
 
 function toastClassName(kind: "default" | "error" = "default"): string {
@@ -68,113 +57,111 @@ function toastClassName(kind: "default" | "error" = "default"): string {
     : "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none";
 }
 
+function normalizeValue(value: string): string {
+  return value.trim();
+}
+
+function getFriendlySyncError(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Sync failed.";
+  if (message.includes("Failed to fetch")) {
+    return "同期ノードに接続できません。同じWi-Fiか、URLを確認してください。";
+  }
+  return message;
+}
+
 function useLabels(language: "ja" | "en") {
   return useMemo(
     () =>
       language === "ja"
         ? {
             title: "同期",
-            subtitle: "下の3つを埋めれば同期できます。",
-            back: "ホームに戻る",
-            manual: "ファイル同期",
-            setupTitle: "まず入れるもの",
-            setupBody: "他の端末でも同じ user ID と passphrase を使ってください。",
-            nodeUrl: "同期先 URL",
-            nodeUrlHint: "家のPCやNASで動かしている sync-node の URL です。",
-            nodeUrlExample: "例: http://192.168.0.10:4010",
-            userId: "同期名",
-            userIdSub: "User ID",
-            userIdHint: "同じメモを共有したい端末どうしで同じ名前を使います。",
-            userIdExample: "例: rita-home",
-            passphrase: "合言葉",
-            passphraseSub: "Passphrase",
-            passphraseHint: "8文字以上。同じ端末どうしで同じ合言葉を使います。",
-            passphraseExample: "例: blue-cat-2026",
-            passphraseStorage: "この browser session にだけ保持されます。",
-            passphraseReady: "session に保持中",
-            passphraseMissing: "未入力",
-            save: "設定を保存",
-            health: "接続確認",
+            subtitle: "このPCで有効化して、スマホはQRで追加します。",
+            back: "ホームへ戻る",
+            manual: "手動ファイル同期",
+            enableTitle: "まずはこのPCで同期を有効化",
+            enableBody: "PC側で一度だけ設定すると、スマホはQRを読むだけで同期に参加できます。",
+            enableAction: "このPCで同期を有効化",
+            enableRetry: "このURLで有効化",
+            enableHint: "通常はそのままで大丈夫です。PCで sync-node が動いていれば自動で見つけます。",
+            customUrlLabel: "カスタム URL",
+            customUrlHint: "自動で見つからない時だけ入力してください。",
+            customUrlPlaceholder: "例: http://192.168.0.10:4010",
+            enabledTitle: "このPCは同期準備済みです",
+            enabledBody: "次はスマホを追加するだけです。",
+            addPhone: "スマホを追加",
+            checkConnection: "接続確認",
             syncNow: "今すぐ同期",
-            needUserId: "同期名を入力してください。",
-            needNodeUrl: "同期先 URL を入力してください。",
-            needPassphrase: "8文字以上の合言葉を入力してください。",
-            saveSuccess: "同期設定を保存しました。",
-            saveFailed: "同期設定の保存に失敗しました。",
-            healthOk: "同期先に接続できました。",
-            healthFailed: "同期先に接続できませんでした。",
-            syncOk: "同期が完了しました。",
-            syncFailed: "同期に失敗しました。",
             advanced: "詳細設定",
-            hideAdvanced: "詳細を閉じる",
-            advancedHint: "通常は変更不要です。新しい同期グループを作る時だけ触ってください。",
+            hideAdvanced: "詳細設定を閉じる",
+            advancedBody: "通常は不要です。既存の同期グループへ手動参加したい時だけ使います。",
+            syncNodeUrl: "同期ノード URL",
+            syncUserId: "同期グループ ID",
+            syncPassphrase: "合言葉",
             deviceName: "端末名",
-            deviceNameHint: "他の端末と区別するための名前です。",
-            salt: "Group Salt",
-            saltHint: "違う同期グループを新しく作る時だけ変更します。",
-            deviceId: "Device ID",
-            nodeId: "Node ID",
-            lastSync: "最終同期",
-            never: "未実行",
-            runSummary: "直近の同期結果",
-            sent: "送信",
-            received: "受信",
+            groupSalt: "グループ Salt",
+            passphraseHint: "8文字以上。既存グループに合わせる時だけ入力します。",
+            saveAdvanced: "詳細設定を保存",
+            enableFailed: "PC上の既定URLで sync-node に接続できませんでした。必要なら URL を入力してください。",
+            enableSuccess: "このPCで同期を有効化しました。",
+            pairingSuccess: "スマホ追加用のQRを作成しました。",
+            healthSuccess: "同期ノードに接続できました。",
+            syncSuccess: "同期が完了しました。",
+            saveSuccess: "詳細設定を保存しました。",
+            needPassphrase: "合言葉を8文字以上で入力してください。",
+            needNodeUrl: "同期ノード URL を入力してください。",
+            latestRun: "最新の同期結果",
+            pushed: "送信",
+            pulled: "受信",
             applied: "反映",
-            duplicates: "重複スキップ",
-            cursor: "Cursor",
-            healthSummary: "接続先",
+            lastSync: "最終同期",
+            notYet: "まだありません",
+            pairedState: "この端末に同期秘密を保存済み",
+            manualState: "この端末で再入力が必要です",
           }
         : {
             title: "SYNC",
-            subtitle: "Fill these three fields to start syncing.",
+            subtitle: "Enable on this PC, then add the phone with one QR scan.",
             back: "Back to home",
-            manual: "File sync",
-            setupTitle: "WHAT TO ENTER FIRST",
-            setupBody: "Use the same user ID and passphrase on the other device.",
-            nodeUrl: "Sync Node URL",
-            nodeUrlHint: "The URL where your home sync-node is running.",
-            nodeUrlExample: "Example: http://192.168.0.10:4010",
-            userId: "Sync Name",
-            userIdSub: "User ID",
-            userIdHint: "Use the same value on every device that should share notes.",
-            userIdExample: "Example: rita-home",
-            passphrase: "Shared Secret",
-            passphraseSub: "Passphrase",
-            passphraseHint: "At least 8 characters. Use the same one on every synced device.",
-            passphraseExample: "Example: blue-cat-2026",
-            passphraseStorage: "Stored in this browser session only.",
-            passphraseReady: "Stored in this session",
-            passphraseMissing: "Not entered",
-            save: "SAVE SETTINGS",
-            health: "CHECK CONNECTION",
+            manual: "Manual file sync",
+            enableTitle: "Start on this PC",
+            enableBody: "Set up sync here once. Phones can join by scanning one QR code.",
+            enableAction: "ENABLE SYNC ON THIS PC",
+            enableRetry: "ENABLE WITH THIS URL",
+            enableHint: "You usually do not need to type anything. TATAC tries the local sync-node first.",
+            customUrlLabel: "Custom URL",
+            customUrlHint: "Only use this if automatic bootstrap does not work.",
+            customUrlPlaceholder: "Example: http://192.168.0.10:4010",
+            enabledTitle: "This PC is ready to sync",
+            enabledBody: "The next step is adding the phone.",
+            addPhone: "ADD PHONE",
+            checkConnection: "CHECK CONNECTION",
             syncNow: "SYNC NOW",
-            needUserId: "Enter a sync name.",
-            needNodeUrl: "Enter a sync node URL.",
-            needPassphrase: "Enter a shared secret with at least 8 characters.",
-            saveSuccess: "Sync settings saved.",
-            saveFailed: "Failed to save sync settings.",
-            healthOk: "Sync destination reachable.",
-            healthFailed: "Failed to reach the sync destination.",
-            syncOk: "Sync completed.",
-            syncFailed: "Sync failed.",
             advanced: "ADVANCED",
             hideAdvanced: "HIDE ADVANCED",
-            advancedHint: "You usually do not need these. Change them only when creating a different sync group.",
+            advancedBody: "Usually unnecessary. Use this only when manually joining an existing sync group.",
+            syncNodeUrl: "Sync Node URL",
+            syncUserId: "Sync Group ID",
+            syncPassphrase: "Passphrase",
             deviceName: "Device Name",
-            deviceNameHint: "Used only to identify this device.",
-            salt: "Group Salt",
-            saltHint: "Change this only if you want to start a completely different sync group.",
-            deviceId: "Device ID",
-            nodeId: "Node ID",
-            lastSync: "Last Sync",
-            never: "Never",
-            runSummary: "LATEST RUN",
-            sent: "Sent",
-            received: "Received",
+            groupSalt: "Group Salt",
+            passphraseHint: "At least 8 characters. Only needed for manual group setup.",
+            saveAdvanced: "SAVE ADVANCED SETTINGS",
+            enableFailed: "Could not reach sync-node at the default PC URL. Enter a URL if needed.",
+            enableSuccess: "Sync is enabled on this PC.",
+            pairingSuccess: "QR code ready for the phone.",
+            healthSuccess: "Sync node is reachable.",
+            syncSuccess: "Sync completed.",
+            saveSuccess: "Advanced sync settings saved.",
+            needPassphrase: "Enter a passphrase with at least 8 characters.",
+            needNodeUrl: "Enter a sync node URL.",
+            latestRun: "LATEST RUN",
+            pushed: "Sent",
+            pulled: "Received",
             applied: "Applied",
-            duplicates: "Duplicates",
-            cursor: "Cursor",
-            healthSummary: "Connected to",
+            lastSync: "Last Sync",
+            notYet: "Not yet",
+            pairedState: "Sync secret is stored on this device",
+            manualState: "This device still needs a secret",
           },
     [language],
   );
@@ -184,236 +171,184 @@ export default function SyncSettingsPage() {
   const [, setLocation] = useLocation();
   const { language, formatDate } = useLanguage();
   const labels = useLabels(language);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const [isBusy, setIsBusy] = useState<"enable" | "pair" | "health" | "sync" | "save" | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
-  const [form, setForm] = useState<SyncSettingsFormState>({
+  const [showCustomUrl, setShowCustomUrl] = useState(false);
+  const [customUrl, setCustomUrl] = useState(getDefaultBootstrapUrl());
+  const [status, setStatus] = useState<StatusMessage | null>(null);
+  const [pageState, setPageState] = useState<SyncPageState | null>(null);
+  const [form, setForm] = useState<AdvancedFormState>({
     userId: "",
     deviceName: "",
     syncNodeUrl: "",
     salt: "",
     passphrase: "",
   });
-  const [savedSettings, setSavedSettings] = useState<SavedSettingsSnapshot>({
-    userId: "",
-    deviceName: "",
-    syncNodeUrl: "",
-    salt: "",
-  });
-  const [configMeta, setConfigMeta] = useState<SyncConfigMetaState>({
-    deviceId: "",
-    nodeId: undefined,
-    registeredAt: undefined,
-    lastSuccessfulSyncAt: null,
-  });
-  const [statusMessage, setStatusMessage] = useState<SyncStatusMessage | null>(null);
   const [healthSummary, setHealthSummary] = useState<{ nodeId: string; serverTime: string } | null>(null);
   const [syncSummary, setSyncSummary] = useState<SyncRunResult | null>(null);
+  const [pairingModal, setPairingModal] = useState<{ open: boolean; url: string; expiresAt: string }>({
+    open: false,
+    url: "",
+    expiresAt: "",
+  });
 
-  const loadPageState = async () => {
-    const config = await getOrCreateSyncConfig();
-    const sessionPassphrase = getSyncSessionSecret()?.passphrase ?? "";
-    const nextSavedSettings = {
+  const syncEnabled = Boolean(pageState?.syncNodeUrl && pageState?.hasPersistedSecret);
+
+  const loadState = async () => {
+    const [config, persistedSecret] = await Promise.all([getOrCreateSyncConfig(), getPersistedSyncSecret()]);
+    setPageState({
+      deviceId: config.deviceId,
+      deviceName: config.deviceName,
+      userId: config.userId,
+      syncNodeUrl: config.syncNodeUrl ?? "",
+      salt: config.salt,
+      nodeId: config.nodeId,
+      lastSuccessfulSyncAt: config.lastSuccessfulSyncAt ?? null,
+      hasPersistedSecret: Boolean(persistedSecret?.groupSecret),
+    });
+    setForm({
       userId: config.userId,
       deviceName: config.deviceName,
       syncNodeUrl: config.syncNodeUrl ?? "",
       salt: config.salt,
-    };
-
-    setForm({
-      ...nextSavedSettings,
-      passphrase: sessionPassphrase,
+      passphrase: persistedSecret?.groupSecret ?? "",
     });
-    setSavedSettings(nextSavedSettings);
-    setConfigMeta({
-      deviceId: config.deviceId,
-      nodeId: config.nodeId,
-      registeredAt: config.registeredAt,
-      lastSuccessfulSyncAt: config.lastSuccessfulSyncAt ?? null,
-    });
+    if (config.syncNodeUrl) {
+      setCustomUrl(config.syncNodeUrl);
+    }
   };
 
   useEffect(() => {
-    void loadPageState();
+    void loadState();
   }, []);
 
-  const normalizedSettings = useMemo(
-    () => ({
-      userId: normalizeValue(form.userId),
-      deviceName: normalizeValue(form.deviceName) || savedSettings.deviceName,
-      syncNodeUrl: normalizeValue(form.syncNodeUrl),
-      salt: normalizeValue(form.salt) || savedSettings.salt,
-    }),
-    [form.deviceName, form.salt, form.syncNodeUrl, form.userId, savedSettings.deviceName, savedSettings.salt],
-  );
-
-  const hasUnsavedSettings = useMemo(
-    () => !areSettingsEqual(normalizedSettings, savedSettings),
-    [normalizedSettings, savedSettings],
-  );
-
-  const passphraseReady = form.passphrase.trim().length >= 8;
-  const saveBlockedReason = !normalizedSettings.userId ? labels.needUserId : null;
-  const healthBlockedReason = !normalizedSettings.syncNodeUrl ? labels.needNodeUrl : null;
-  const syncBlockedReason =
-    !normalizedSettings.userId
-      ? labels.needUserId
-      : !normalizedSettings.syncNodeUrl
-        ? labels.needNodeUrl
-        : !passphraseReady
-          ? labels.needPassphrase
-          : null;
-
-  const handleChange =
-    (field: keyof SyncSettingsFormState) => (event: React.ChangeEvent<HTMLInputElement>) => {
-      const value = event.target.value;
-      setForm((current) => ({ ...current, [field]: value }));
-
-      if (field === "passphrase") {
-        setSyncSessionSecret({ passphrase: value });
-        setStatusMessage({
-          tone: value.trim().length >= 8 ? "success" : "warning",
-          text: value.trim().length >= 8 ? labels.passphraseReady : labels.needPassphrase,
-        });
-        return;
-      }
-
-      setStatusMessage(null);
-      setHealthSummary(null);
-      setSyncSummary(null);
-    };
-
-  const handleSave = async ({ silent = false }: { silent?: boolean } = {}): Promise<boolean> => {
-    if (saveBlockedReason) {
-      setStatusMessage({
-        tone: "warning",
-        text: saveBlockedReason,
-      });
-      if (!silent) {
-        toast.error(saveBlockedReason, { className: toastClassName("error") });
-      }
-      return false;
-    }
-
-    setIsSaving(true);
+  const handleEnable = async () => {
+    setIsBusy("enable");
+    setHealthSummary(null);
+    setSyncSummary(null);
     try {
-      const saved = await saveSyncSettingsDraft({
-        userId: normalizedSettings.userId,
-        deviceName: normalizedSettings.deviceName,
-        syncNodeUrl: normalizedSettings.syncNodeUrl,
-        salt: normalizedSettings.salt,
+      await enableSyncOnThisDevice({
+        preferredBootstrapUrl: showCustomUrl ? customUrl : undefined,
       });
-
-      setSyncSessionSecret({ passphrase: form.passphrase });
-
-      const nextSavedSettings = {
-        userId: saved.userId,
-        deviceName: saved.deviceName,
-        syncNodeUrl: saved.syncNodeUrl ?? "",
-        salt: saved.salt,
-      };
-
-      setSavedSettings(nextSavedSettings);
-      setForm((current) => ({
-        ...current,
-        ...nextSavedSettings,
-      }));
-      setConfigMeta({
-        deviceId: saved.deviceId,
-        nodeId: saved.nodeId,
-        registeredAt: saved.registeredAt,
-        lastSuccessfulSyncAt: saved.lastSuccessfulSyncAt ?? null,
-      });
-      setStatusMessage({
-        tone: "success",
-        text: labels.saveSuccess,
-      });
-
-      if (!silent) {
-        toast.success(labels.saveSuccess, { className: toastClassName() });
-      }
-      return true;
-    } catch {
-      setStatusMessage({
+      await loadState();
+      setShowCustomUrl(false);
+      setStatus({ tone: "success", text: labels.enableSuccess });
+      toast.success(labels.enableSuccess, { className: toastClassName() });
+    } catch (error) {
+      const message = getFriendlySyncError(error);
+      setShowCustomUrl(true);
+      setStatus({
         tone: "warning",
-        text: labels.saveFailed,
+        text: showCustomUrl ? message : labels.enableFailed,
       });
-      if (!silent) {
-        toast.error(labels.saveFailed, { className: toastClassName("error") });
-      }
-      return false;
+      toast.error(showCustomUrl ? message : labels.enableFailed, { className: toastClassName("error") });
     } finally {
-      setIsSaving(false);
+      setIsBusy(null);
     }
   };
 
-  const handleHealthCheck = async () => {
-    if (healthBlockedReason) {
-      setStatusMessage({
-        tone: "warning",
-        text: healthBlockedReason,
-      });
-      toast.error(healthBlockedReason, { className: toastClassName("error") });
-      return;
-    }
-
-    setIsCheckingHealth(true);
+  const handleCreatePairing = async () => {
+    setIsBusy("pair");
     try {
-      const health = await checkSyncNodeHealth(normalizedSettings.syncNodeUrl);
-      setHealthSummary(health);
-      setStatusMessage({
-        tone: "success",
-        text: labels.healthOk,
+      const result = await createPairingSessionForMobile();
+      setPairingModal({
+        open: true,
+        url: result.pairingUrl,
+        expiresAt: result.expiresAt,
       });
-      toast.success(labels.healthOk, { className: toastClassName() });
+      setStatus({ tone: "success", text: labels.pairingSuccess });
+      toast.success(labels.pairingSuccess, { className: toastClassName() });
     } catch (error) {
-      const message = error instanceof Error ? error.message : labels.healthFailed;
-      setHealthSummary(null);
-      setStatusMessage({
-        tone: "warning",
-        text: message,
-      });
+      const message = getFriendlySyncError(error);
+      setStatus({ tone: "warning", text: message });
       toast.error(message, { className: toastClassName("error") });
     } finally {
-      setIsCheckingHealth(false);
+      setIsBusy(null);
     }
   };
 
-  const handleSyncNow = async () => {
-    if (syncBlockedReason) {
-      setStatusMessage({
-        tone: "warning",
-        text: syncBlockedReason,
-      });
-      toast.error(syncBlockedReason, { className: toastClassName("error") });
+  const handleHealth = async () => {
+    const targetUrl = normalizeValue(form.syncNodeUrl || pageState?.syncNodeUrl || "");
+    if (!targetUrl) {
+      setStatus({ tone: "warning", text: labels.needNodeUrl });
+      toast.error(labels.needNodeUrl, { className: toastClassName("error") });
       return;
     }
 
-    if (hasUnsavedSettings) {
-      const saved = await handleSave({ silent: true });
-      if (!saved) return;
+    setIsBusy("health");
+    try {
+      const summary = await checkSyncNodeHealth(targetUrl);
+      setHealthSummary(summary);
+      setStatus({ tone: "success", text: labels.healthSuccess });
+      toast.success(labels.healthSuccess, { className: toastClassName() });
+    } catch (error) {
+      const message = getFriendlySyncError(error);
+      setHealthSummary(null);
+      setStatus({ tone: "warning", text: message });
+      toast.error(message, { className: toastClassName("error") });
+    } finally {
+      setIsBusy(null);
     }
+  };
 
-    setIsSyncing(true);
+  const handleSync = async () => {
+    setIsBusy("sync");
     try {
       const result = await syncWithNode();
       setSyncSummary(result);
-      setStatusMessage({
-        tone: "success",
-        text: labels.syncOk,
-      });
-      await loadPageState();
-      toast.success(labels.syncOk, { className: toastClassName() });
+      await loadState();
+      setStatus({ tone: "success", text: labels.syncSuccess });
+      toast.success(labels.syncSuccess, { className: toastClassName() });
     } catch (error) {
-      const message = error instanceof Error ? error.message : labels.syncFailed;
-      setStatusMessage({
-        tone: "warning",
-        text: message,
-      });
+      const message = getFriendlySyncError(error);
+      setStatus({ tone: "warning", text: message });
       toast.error(message, { className: toastClassName("error") });
     } finally {
-      setIsSyncing(false);
+      setIsBusy(null);
+    }
+  };
+
+  const handleSaveAdvanced = async () => {
+    const normalizedPassphrase = normalizeValue(form.passphrase);
+    const normalizedSyncNodeUrl = normalizeValue(form.syncNodeUrl);
+    const normalizedUserId = normalizeValue(form.userId || pageState?.userId || "");
+    const normalizedDeviceName = normalizeValue(form.deviceName || pageState?.deviceName || "");
+    const normalizedSalt = normalizeValue(form.salt || pageState?.salt || "");
+
+    if (!normalizedSyncNodeUrl) {
+      setStatus({ tone: "warning", text: labels.needNodeUrl });
+      toast.error(labels.needNodeUrl, { className: toastClassName("error") });
+      return;
+    }
+
+    if (normalizedPassphrase.length < 8) {
+      setStatus({ tone: "warning", text: labels.needPassphrase });
+      toast.error(labels.needPassphrase, { className: toastClassName("error") });
+      return;
+    }
+
+    setIsBusy("save");
+    try {
+      await saveSyncSettingsDraft({
+        userId: normalizedUserId,
+        deviceName: normalizedDeviceName,
+        syncNodeUrl: normalizedSyncNodeUrl,
+        salt: normalizedSalt,
+      });
+      await savePersistedSyncSecret({
+        groupSecret: normalizedPassphrase,
+        origin: "manual",
+      });
+      setSyncSessionSecret({ passphrase: normalizedPassphrase });
+      await loadState();
+      setStatus({ tone: "success", text: labels.saveSuccess });
+      toast.success(labels.saveSuccess, { className: toastClassName() });
+    } catch (error) {
+      const message = getFriendlySyncError(error);
+      setStatus({ tone: "warning", text: message });
+      toast.error(message, { className: toastClassName("error") });
+    } finally {
+      setIsBusy(null);
     }
   };
 
@@ -439,11 +374,11 @@ export default function SyncSettingsPage() {
           </div>
 
           <Button
-            onClick={() => setLocation("/manual-sync")}
+            type="button"
             variant="outline"
+            onClick={() => setLocation("/manual-sync")}
             className="rounded-none border-2 border-foreground font-bold"
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
             {labels.manual}
           </Button>
         </div>
@@ -451,112 +386,129 @@ export default function SyncSettingsPage() {
 
       <main className="mx-auto max-w-4xl space-y-4 px-4 py-6">
         <section className="border-2 border-border bg-card p-5">
-          <div className="mb-5 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center border-2 border-foreground bg-foreground text-background">
-              <RadioTower className="h-4 w-4" />
-            </span>
-            <div>
-              <h2 className="font-black uppercase tracking-widest">{labels.setupTitle}</h2>
-              <p className="text-sm text-muted-foreground">{labels.setupBody}</p>
-            </div>
-          </div>
-
-          <div className="grid gap-4">
-            <label className="block space-y-2">
-              <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                {labels.nodeUrl}
-              </span>
-              <Input
-                aria-label="sync-node-url"
-                value={form.syncNodeUrl}
-                onChange={handleChange("syncNodeUrl")}
-                placeholder={labels.nodeUrlExample}
-                className="rounded-none border-2 placeholder:text-muted-foreground/60"
-              />
-              <p className="text-xs text-muted-foreground">{labels.nodeUrlHint}</p>
-            </label>
-
-            <label className="block space-y-2">
-              <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                {labels.userId}
-                <span className="ml-2 text-[10px] font-medium tracking-[0.12em] text-muted-foreground/80">
-                  {labels.userIdSub}
+          {!syncEnabled ? (
+            <div className="space-y-5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 items-center justify-center border-2 border-foreground bg-foreground text-background">
+                  <MonitorUp className="h-5 w-5" />
                 </span>
-              </span>
-              <Input
-                aria-label="sync-user-id"
-                value={form.userId}
-                onChange={handleChange("userId")}
-                placeholder={labels.userIdExample}
-                className="rounded-none border-2 placeholder:text-muted-foreground/60"
-              />
-              <p className="text-xs text-muted-foreground">{labels.userIdHint}</p>
-            </label>
-
-            <label className="block space-y-2">
-              <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                {labels.passphrase}
-                <span className="ml-2 text-[10px] font-medium tracking-[0.12em] text-muted-foreground/80">
-                  {labels.passphraseSub}
-                </span>
-              </span>
-              <Input
-                aria-label="sync-passphrase"
-                type="password"
-                value={form.passphrase}
-                onChange={handleChange("passphrase")}
-                placeholder={labels.passphraseExample}
-                className="rounded-none border-2 placeholder:text-muted-foreground/60"
-              />
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-muted-foreground">
-                  {labels.passphraseHint} {labels.passphraseStorage}
-                </span>
-                <span
-                  className={`border px-2 py-1 font-black uppercase tracking-[0.18em] ${
-                    passphraseReady
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border text-muted-foreground"
-                  }`}
-                >
-                  {passphraseReady ? labels.passphraseReady : labels.passphraseMissing}
-                </span>
+                <div>
+                  <h2 className="font-black uppercase tracking-widest">{labels.enableTitle}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{labels.enableBody}</p>
+                </div>
               </div>
-            </label>
-          </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <Button
-              onClick={() => {
-                void handleSave();
-              }}
-              disabled={isSaving || Boolean(saveBlockedReason)}
-              variant="outline"
-              className="h-12 rounded-none border-2 border-foreground font-black uppercase tracking-[0.2em]"
-            >
-              <Save className="mr-2 h-4 w-4" />
-              {labels.save}
-            </Button>
+              <div className="border border-border bg-muted/20 px-4 py-4 text-sm text-muted-foreground">
+                {labels.enableHint}
+              </div>
 
-            <Button
-              onClick={handleHealthCheck}
-              disabled={isCheckingHealth || Boolean(healthBlockedReason)}
-              variant="outline"
-              className="h-12 rounded-none border-2 border-foreground font-black uppercase tracking-[0.2em]"
-            >
-              <Cable className="mr-2 h-4 w-4" />
-              {labels.health}
-            </Button>
+              {showCustomUrl && (
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    {labels.customUrlLabel}
+                  </span>
+                  <Input
+                    aria-label="sync-node-url"
+                    value={customUrl}
+                    onChange={(event) => setCustomUrl(event.target.value)}
+                    placeholder={labels.customUrlPlaceholder}
+                    className="rounded-none border-2"
+                  />
+                  <p className="text-xs text-muted-foreground">{labels.customUrlHint}</p>
+                </label>
+              )}
 
-            <Button
-              onClick={handleSyncNow}
-              disabled={isSyncing || Boolean(syncBlockedReason)}
-              className="h-12 rounded-none border-2 border-foreground bg-foreground font-black uppercase tracking-[0.2em] text-background hover:bg-foreground/90"
-            >
-              <Activity className="mr-2 h-4 w-4" />
-              {labels.syncNow}
-            </Button>
-          </div>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  type="button"
+                  onClick={handleEnable}
+                  disabled={isBusy === "enable"}
+                  className="h-12 rounded-none border-2 border-foreground bg-foreground font-black uppercase tracking-[0.2em] text-background hover:bg-foreground/90"
+                >
+                  <ShieldCheck className="mr-2 h-4 w-4" />
+                  {showCustomUrl ? labels.enableRetry : labels.enableAction}
+                </Button>
+
+                {!showCustomUrl && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowCustomUrl(true)}
+                    className="h-12 rounded-none border-2 border-foreground font-bold uppercase tracking-[0.18em]"
+                  >
+                    {labels.customUrlLabel}
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 items-center justify-center border-2 border-foreground bg-foreground text-background">
+                  <ShieldCheck className="h-5 w-5" />
+                </span>
+                <div>
+                  <h2 className="font-black uppercase tracking-widest">{labels.enabledTitle}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{labels.enabledBody}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="border border-border px-3 py-3">
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Node URL</div>
+                  <div className="mt-2 break-all font-mono text-xs">{pageState?.syncNodeUrl}</div>
+                </div>
+                <div className="border border-border px-3 py-3">
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Device</div>
+                  <div className="mt-2 text-sm">{pageState?.deviceName}</div>
+                </div>
+                <div className="border border-border px-3 py-3">
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{labels.lastSync}</div>
+                  <div className="mt-2 text-sm">
+                    {pageState?.lastSuccessfulSyncAt
+                      ? formatDate(pageState.lastSuccessfulSyncAt)
+                      : labels.notYet}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border border-border bg-muted/20 px-4 py-3 text-sm">
+                {pageState?.hasPersistedSecret ? labels.pairedState : labels.manualState}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <Button
+                  type="button"
+                  onClick={handleCreatePairing}
+                  disabled={isBusy === "pair"}
+                  className="h-12 rounded-none border-2 border-foreground bg-foreground font-black uppercase tracking-[0.2em] text-background hover:bg-foreground/90"
+                >
+                  <QrCode className="mr-2 h-4 w-4" />
+                  {labels.addPhone}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleHealth}
+                  disabled={isBusy === "health"}
+                  className="h-12 rounded-none border-2 border-foreground font-black uppercase tracking-[0.2em]"
+                >
+                  <Cable className="mr-2 h-4 w-4" />
+                  {labels.checkConnection}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSync}
+                  disabled={isBusy === "sync"}
+                  className="h-12 rounded-none border-2 border-foreground font-black uppercase tracking-[0.2em]"
+                >
+                  <Activity className="mr-2 h-4 w-4" />
+                  {labels.syncNow}
+                </Button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="border-2 border-border bg-card p-5">
@@ -569,13 +521,55 @@ export default function SyncSettingsPage() {
               <h2 className="font-black uppercase tracking-widest">
                 {showAdvanced ? labels.hideAdvanced : labels.advanced}
               </h2>
-              <p className="mt-1 text-sm text-muted-foreground">{labels.advancedHint}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{labels.advancedBody}</p>
             </div>
             {showAdvanced ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
           </button>
 
           {showAdvanced && (
-            <div className="mt-5 space-y-5 border-t border-border pt-5">
+            <div className="mt-5 space-y-4 border-t border-border pt-5">
+              <label className="block space-y-2">
+                <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                  {labels.syncNodeUrl}
+                </span>
+                <Input
+                  aria-label="sync-node-url"
+                  value={form.syncNodeUrl}
+                  onChange={(event) => setForm((current) => ({ ...current, syncNodeUrl: event.target.value }))}
+                  placeholder={labels.customUrlPlaceholder}
+                  className="rounded-none border-2"
+                />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    {labels.syncUserId}
+                  </span>
+                  <Input
+                    aria-label="sync-user-id"
+                    value={form.userId}
+                    onChange={(event) => setForm((current) => ({ ...current, userId: event.target.value }))}
+                    className="rounded-none border-2"
+                  />
+                </label>
+
+                <label className="block space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
+                    {labels.syncPassphrase}
+                  </span>
+                  <Input
+                    aria-label="sync-passphrase"
+                    type="password"
+                    value={form.passphrase}
+                    onChange={(event) => setForm((current) => ({ ...current, passphrase: event.target.value }))}
+                    placeholder="********"
+                    className="rounded-none border-2"
+                  />
+                  <p className="text-xs text-muted-foreground">{labels.passphraseHint}</p>
+                </label>
+              </div>
+
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="block space-y-2">
                   <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
@@ -584,80 +578,67 @@ export default function SyncSettingsPage() {
                   <Input
                     aria-label="sync-device-name"
                     value={form.deviceName}
-                    onChange={handleChange("deviceName")}
-                    placeholder={form.deviceName || "Rita iPhone"}
-                    className="rounded-none border-2 placeholder:text-muted-foreground/60"
+                    onChange={(event) => setForm((current) => ({ ...current, deviceName: event.target.value }))}
+                    className="rounded-none border-2"
                   />
-                  <p className="text-xs text-muted-foreground">{labels.deviceNameHint}</p>
                 </label>
 
                 <label className="block space-y-2">
                   <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                    {labels.salt}
+                    {labels.groupSalt}
                   </span>
                   <Input
                     aria-label="sync-salt"
                     value={form.salt}
-                    onChange={handleChange("salt")}
-                    placeholder={form.salt}
-                    className="rounded-none border-2 font-mono text-xs placeholder:text-muted-foreground/60"
+                    onChange={(event) => setForm((current) => ({ ...current, salt: event.target.value }))}
+                    className="rounded-none border-2 font-mono text-xs"
                   />
-                  <p className="text-xs text-muted-foreground">{labels.saltHint}</p>
                 </label>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
                 <div className="border border-border px-3 py-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    {labels.deviceId}
-                  </div>
-                  <div className="mt-2 font-mono text-sm">{configMeta.deviceId || "..."}</div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Device ID</div>
+                  <div className="mt-2 font-mono text-sm">{pageState?.deviceId ?? "..."}</div>
                 </div>
-                <div className="border border-border px-3 py-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    {labels.nodeId}
-                  </div>
-                  <div className="mt-2 font-mono text-sm">{configMeta.nodeId ?? "..."}</div>
-                </div>
-                <div className="border border-border px-3 py-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    {labels.lastSync}
-                  </div>
-                  <div className="mt-2 text-sm">
-                    {configMeta.lastSuccessfulSyncAt
-                      ? formatDate(configMeta.lastSuccessfulSyncAt)
-                      : labels.never}
-                  </div>
-                </div>
+                <Button
+                  type="button"
+                  onClick={handleSaveAdvanced}
+                  disabled={isBusy === "save"}
+                  variant="outline"
+                  className="h-12 self-end rounded-none border-2 border-foreground font-black uppercase tracking-[0.2em]"
+                >
+                  {labels.saveAdvanced}
+                </Button>
               </div>
             </div>
           )}
         </section>
 
-        {(statusMessage || healthSummary || syncSummary) && (
-          <section className="border-2 border-border bg-card p-5">
-            {statusMessage && (
+        {(status || healthSummary || syncSummary) && (
+          <section className="space-y-4">
+            {status && (
               <div
-                className={`flex items-start gap-3 border px-4 py-3 ${
-                  statusMessage.tone === "success"
-                    ? "border-foreground/30 bg-muted/20"
+                className={`border-2 px-4 py-4 ${
+                  status.tone === "success"
+                    ? "border-border bg-card"
                     : "border-destructive/40 bg-destructive/5"
                 }`}
               >
-                {statusMessage.tone === "success" ? (
-                  <CircleCheckBig className="mt-0.5 h-4 w-4" />
-                ) : (
-                  <TriangleAlert className="mt-0.5 h-4 w-4 text-destructive" />
-                )}
-                <p className="text-sm">{statusMessage.text}</p>
+                <div className="flex items-start gap-3">
+                  {status.tone === "success" ? (
+                    <ShieldCheck className="mt-0.5 h-4 w-4" />
+                  ) : (
+                    <TriangleAlert className="mt-0.5 h-4 w-4 text-destructive" />
+                  )}
+                  <p className="text-sm">{status.text}</p>
+                </div>
               </div>
             )}
 
             {healthSummary && (
-              <div className="mt-4 border border-border px-4 py-3 text-sm">
-                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  {labels.healthSummary}
-                </div>
+              <div className="border-2 border-border bg-card px-4 py-4 text-sm">
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">Health</div>
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <span className="font-mono">{healthSummary.nodeId}</span>
                   <span>{formatDate(healthSummary.serverTime)}</span>
@@ -666,31 +647,20 @@ export default function SyncSettingsPage() {
             )}
 
             {syncSummary && (
-              <div className="mt-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <ShieldCheck className="h-4 w-4" />
-                  <h2 className="font-black uppercase tracking-widest">{labels.runSummary}</h2>
-                </div>
-                <div className="grid gap-3 md:grid-cols-5">
+              <div className="border-2 border-border bg-card p-5">
+                <div className="mb-3 font-black uppercase tracking-widest">{labels.latestRun}</div>
+                <div className="grid gap-3 md:grid-cols-3">
                   <div className="border border-border px-3 py-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{labels.sent}</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{labels.pushed}</div>
                     <div className="mt-2 font-mono text-lg font-black">{syncSummary.pushed}</div>
                   </div>
                   <div className="border border-border px-3 py-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{labels.received}</div>
+                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{labels.pulled}</div>
                     <div className="mt-2 font-mono text-lg font-black">{syncSummary.pulled}</div>
                   </div>
                   <div className="border border-border px-3 py-3">
                     <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{labels.applied}</div>
                     <div className="mt-2 font-mono text-lg font-black">{syncSummary.applied}</div>
-                  </div>
-                  <div className="border border-border px-3 py-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{labels.duplicates}</div>
-                    <div className="mt-2 font-mono text-lg font-black">{syncSummary.duplicates}</div>
-                  </div>
-                  <div className="border border-border px-3 py-3">
-                    <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{labels.cursor}</div>
-                    <div className="mt-2 font-mono text-lg font-black">{syncSummary.cursor}</div>
                   </div>
                 </div>
               </div>
@@ -698,6 +668,13 @@ export default function SyncSettingsPage() {
           </section>
         )}
       </main>
+
+      <SyncPairingQrModal
+        open={pairingModal.open}
+        onOpenChange={(open) => setPairingModal((current) => ({ ...current, open }))}
+        pairingUrl={pairingModal.url}
+        expiresAt={pairingModal.expiresAt}
+      />
     </div>
   );
 }

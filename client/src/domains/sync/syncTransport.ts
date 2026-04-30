@@ -1,4 +1,10 @@
 import {
+  apiErrorSchema,
+  bootstrapResponseSchema,
+  consumePairingSessionRequestSchema,
+  consumePairingSessionResponseSchema,
+  createPairingSessionRequestSchema,
+  createPairingSessionResponseSchema,
   healthResponseSchema,
   pullRequestSchema,
   pullResponseSchema,
@@ -6,6 +12,11 @@ import {
   pushResponseSchema,
   registerDeviceRequestSchema,
   registerDeviceResponseSchema,
+  type BootstrapResponse,
+  type ConsumePairingSessionRequest,
+  type ConsumePairingSessionResponse,
+  type CreatePairingSessionRequest,
+  type CreatePairingSessionResponse,
   type HealthResponse,
   type PullRequest,
   type PullResponse,
@@ -17,6 +28,19 @@ import {
 
 function buildApiUrl(syncNodeUrl: string, path: string): string {
   return new URL(path, syncNodeUrl.endsWith("/") ? syncNodeUrl : `${syncNodeUrl}/`).toString();
+}
+
+async function parseError(response: Response): Promise<never> {
+  try {
+    const payload = apiErrorSchema.parse(await response.json());
+    throw new Error(payload.error.message);
+  } catch (error) {
+    if (error instanceof Error && error.message) {
+      throw error;
+    }
+
+    throw new Error(`Sync node request failed with status ${response.status}.`);
+  }
 }
 
 async function postJson<TRequest, TResponse>(
@@ -36,19 +60,31 @@ async function postJson<TRequest, TResponse>(
   });
 
   if (!response.ok) {
-    throw new Error(`Sync node request failed with status ${response.status}.`);
+    return parseError(response);
   }
 
   return responseValidator.parse(await response.json());
 }
 
-export async function fetchHealth(syncNodeUrl: string): Promise<HealthResponse> {
-  const response = await fetch(buildApiUrl(syncNodeUrl, "/api/v1/health"));
+async function getJson<TResponse>(
+  syncNodeUrl: string,
+  path: string,
+  responseValidator: { parse: (input: unknown) => TResponse },
+): Promise<TResponse> {
+  const response = await fetch(buildApiUrl(syncNodeUrl, path));
   if (!response.ok) {
-    throw new Error(`Health check failed with status ${response.status}.`);
+    return parseError(response);
   }
 
-  return healthResponseSchema.parse(await response.json());
+  return responseValidator.parse(await response.json());
+}
+
+export function fetchHealth(syncNodeUrl: string): Promise<HealthResponse> {
+  return getJson(syncNodeUrl, "/api/v1/health", healthResponseSchema);
+}
+
+export function fetchBootstrap(syncNodeUrl: string): Promise<BootstrapResponse> {
+  return getJson(syncNodeUrl, "/api/v1/bootstrap", bootstrapResponseSchema);
 }
 
 export function registerDevice(syncNodeUrl: string, request: RegisterDeviceRequest): Promise<RegisterDeviceResponse> {
@@ -61,4 +97,30 @@ export function pushEnvelopes(syncNodeUrl: string, request: PushRequest): Promis
 
 export function pullEnvelopes(syncNodeUrl: string, request: PullRequest): Promise<PullResponse> {
   return postJson(syncNodeUrl, "/api/v1/pull", request, pullRequestSchema, pullResponseSchema);
+}
+
+export function createPairingSession(
+  syncNodeUrl: string,
+  request: CreatePairingSessionRequest,
+): Promise<CreatePairingSessionResponse> {
+  return postJson(
+    syncNodeUrl,
+    "/api/v1/pairing-sessions",
+    request,
+    createPairingSessionRequestSchema,
+    createPairingSessionResponseSchema,
+  );
+}
+
+export function consumePairingSession(
+  syncNodeUrl: string,
+  request: ConsumePairingSessionRequest,
+): Promise<ConsumePairingSessionResponse> {
+  return postJson(
+    syncNodeUrl,
+    "/api/v1/consume-pairing-session",
+    request,
+    consumePairingSessionRequestSchema,
+    consumePairingSessionResponseSchema,
+  );
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  base64StringSchema,
   clientVersionSchema,
   deviceIdSchema,
   deviceNameSchema,
@@ -8,6 +9,9 @@ import {
   isoDateTimeStringSchema,
   nodeIdSchema,
   nonNegativeIntSchema,
+  pairingBundleSchema,
+  pairingSessionIdSchema,
+  syncNodeUrlSchema,
   userIdSchema,
 } from "./domain";
 
@@ -77,6 +81,47 @@ export const healthResponseSchema = z
   })
   .strict();
 
+export const bootstrapResponseSchema = z
+  .object({
+    ok: z.literal(true),
+    nodeId: nodeIdSchema,
+    serverTime: isoDateTimeStringSchema,
+    candidateUrls: z.array(syncNodeUrlSchema).min(1),
+    defaultCandidateUrl: syncNodeUrlSchema,
+  })
+  .strict();
+
+export const createPairingSessionRequestSchema = z
+  .object({
+    pairingKeyHash: base64StringSchema,
+    bundle: pairingBundleSchema,
+  })
+  .strict();
+
+export const createPairingSessionResponseSchema = z
+  .object({
+    ok: z.literal(true),
+    sessionId: pairingSessionIdSchema,
+    expiresAt: isoDateTimeStringSchema,
+  })
+  .strict();
+
+export const consumePairingSessionRequestSchema = z
+  .object({
+    sessionId: pairingSessionIdSchema,
+    pairingKey: base64StringSchema,
+  })
+  .strict();
+
+export const consumePairingSessionResponseSchema = z
+  .object({
+    ok: z.literal(true),
+    nodeId: nodeIdSchema,
+    serverTime: isoDateTimeStringSchema,
+    bundle: pairingBundleSchema,
+  })
+  .strict();
+
 export const apiErrorSchema = z
   .object({
     ok: z.literal(false),
@@ -97,4 +142,9 @@ export type PullRequest = z.infer<typeof pullRequestSchema>;
 export type PullItem = z.infer<typeof pullItemSchema>;
 export type PullResponse = z.infer<typeof pullResponseSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+export type BootstrapResponse = z.infer<typeof bootstrapResponseSchema>;
+export type CreatePairingSessionRequest = z.infer<typeof createPairingSessionRequestSchema>;
+export type CreatePairingSessionResponse = z.infer<typeof createPairingSessionResponseSchema>;
+export type ConsumePairingSessionRequest = z.infer<typeof consumePairingSessionRequestSchema>;
+export type ConsumePairingSessionResponse = z.infer<typeof consumePairingSessionResponseSchema>;
 export type ApiError = z.infer<typeof apiErrorSchema>;

@@ -24,6 +24,7 @@ export const userIdSchema = opaqueIdSchema;
 export const deviceIdSchema = opaqueIdSchema;
 export const deviceNameSchema = z.string().trim().min(1).max(128);
 export const nodeIdSchema = opaqueIdSchema;
+export const pairingSessionIdSchema = opaqueIdSchema;
 export const clientVersionSchema = z.string().trim().min(1).max(32);
 export const syncNodeUrlSchema = z.url().trim();
 
@@ -149,6 +150,15 @@ export const syncSessionSecretSchema = z
   })
   .strict();
 
+export const persistedSyncSecretSchema = z
+  .object({
+    configId: z.literal("active"),
+    groupSecret: z.string().min(8),
+    persistedAt: isoDateTimeStringSchema,
+    origin: z.enum(["manual", "generated", "paired"]),
+  })
+  .strict();
+
 export const syncCursorRecordSchema = z
   .object({
     id: z.string().min(1),
@@ -156,6 +166,42 @@ export const syncCursorRecordSchema = z
     syncNodeUrl: syncNodeUrlSchema,
     lastPulledSeq: nonNegativeIntSchema,
     updatedAt: isoDateTimeStringSchema,
+  })
+  .strict();
+
+export const pairingBundlePayloadSchema = z
+  .object({
+    pairingVersion: z.literal(1),
+    syncGroupId: userIdSchema,
+    groupSecret: z.string().min(8),
+    salt: base64StringSchema,
+    syncNodeUrl: syncNodeUrlSchema,
+    sourceDeviceId: deviceIdSchema,
+    sourceDeviceName: deviceNameSchema,
+    createdAt: isoDateTimeStringSchema,
+    expiresAt: isoDateTimeStringSchema,
+  })
+  .strict();
+
+export const pairingBundleSchema = z
+  .object({
+    pairingVersion: z.literal(1),
+    nonce: base64StringSchema,
+    cipherText: base64StringSchema,
+    aad: base64StringSchema,
+    createdAt: isoDateTimeStringSchema,
+    expiresAt: isoDateTimeStringSchema,
+  })
+  .strict();
+
+export const pairingSessionRecordSchema = z
+  .object({
+    sessionId: pairingSessionIdSchema,
+    pairingKeyHash: base64StringSchema,
+    bundle: pairingBundleSchema,
+    createdAt: isoDateTimeStringSchema,
+    expiresAt: isoDateTimeStringSchema,
+    consumedAt: isoDateTimeStringSchema.optional(),
   })
   .strict();
 
@@ -183,5 +229,9 @@ export type EnvelopeAad = z.infer<typeof envelopeAadSchema>;
 export type SyncKdfParams = z.infer<typeof syncKdfParamsSchema>;
 export type PersistedSyncConfig = z.infer<typeof persistedSyncConfigSchema>;
 export type SyncSessionSecret = z.infer<typeof syncSessionSecretSchema>;
+export type PersistedSyncSecret = z.infer<typeof persistedSyncSecretSchema>;
 export type SyncCursorRecord = z.infer<typeof syncCursorRecordSchema>;
+export type PairingBundlePayload = z.infer<typeof pairingBundlePayloadSchema>;
+export type PairingBundle = z.infer<typeof pairingBundleSchema>;
+export type PairingSessionRecord = z.infer<typeof pairingSessionRecordSchema>;
 export type TatacSyncFile = z.infer<typeof tatacSyncFileSchema>;

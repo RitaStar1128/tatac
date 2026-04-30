@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { encryptedEnvelopeSchema } from "../../../shared/contracts";
+import {
+  encryptedEnvelopeSchema,
+  pairingSessionRecordSchema,
+} from "../../../shared/contracts";
 
 export const storedEnvelopeItemSchema = z
   .object({
@@ -31,6 +34,7 @@ export const syncNodeStoreSchema = z
   .object({
     nodeId: z.string().min(1),
     users: z.record(z.string(), userBucketSchema),
+    pairingSessions: z.record(z.string(), pairingSessionRecordSchema),
   })
   .strict();
 
@@ -38,3 +42,4 @@ export type StoredEnvelopeItem = z.infer<typeof storedEnvelopeItemSchema>;
 export type RegisteredDevice = z.infer<typeof registeredDeviceSchema>;
 export type UserBucket = z.infer<typeof userBucketSchema>;
 export type SyncNodeStore = z.infer<typeof syncNodeStoreSchema>;
+export type PairingSessionRecordEntity = z.infer<typeof pairingSessionRecordSchema>;

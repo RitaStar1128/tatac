@@ -1,6 +1,14 @@
+import { createHash } from "node:crypto";
+
 import { Router } from "express";
 
 import {
+  apiErrorSchema,
+  bootstrapResponseSchema,
+  consumePairingSessionRequestSchema,
+  consumePairingSessionResponseSchema,
+  createPairingSessionRequestSchema,
+  createPairingSessionResponseSchema,
   healthResponseSchema,
   pullRequestSchema,
   pullResponseSchema,
@@ -9,30 +17,69 @@ import {
   registerDeviceRequestSchema,
   registerDeviceResponseSchema,
 } from "../../../shared/contracts";
+import { decodeBase64Url, encodeBase64Url } from "../../../shared/lib/base64url";
 
-import { FileBackedSyncNodeStore } from "../services/fileStore";
+import {
+  FileBackedSyncNodeStore,
+  PairingSessionStoreError,
+} from "../services/fileStore";
 
 function validationError(message: string) {
-  return {
-    ok: false as const,
+  return apiErrorSchema.parse({
+    ok: false,
     error: {
       code: "VALIDATION_ERROR",
       message,
     },
-  };
+  });
 }
 
 function internalError() {
-  return {
-    ok: false as const,
+  return apiErrorSchema.parse({
+    ok: false,
     error: {
       code: "INTERNAL_ERROR",
       message: "Unexpected sync node error",
     },
+  });
+}
+
+function hashPairingKey(pairingKey: string): string {
+  return encodeBase64Url(createHash("sha256").update(decodeBase64Url(pairingKey)).digest());
+}
+
+function mapPairingError(error: PairingSessionStoreError): {
+  status: number;
+  payload: ReturnType<typeof apiErrorSchema.parse>;
+} {
+  const status =
+    error.code === "PAIRING_NOT_FOUND"
+      ? 404
+      : error.code === "PAIRING_ALREADY_USED" || error.code === "PAIRING_EXPIRED"
+        ? 409
+        : 400;
+
+  return {
+    status,
+    payload: apiErrorSchema.parse({
+      ok: false,
+      error: {
+        code: error.code,
+        message: error.message,
+      },
+    }),
   };
 }
 
-export function createApiRouter(store: FileBackedSyncNodeStore): Router {
+export interface BootstrapInfo {
+  candidateUrls: string[];
+  defaultCandidateUrl: string;
+}
+
+export function createApiRouter(
+  store: FileBackedSyncNodeStore,
+  options: { getBootstrapInfo: () => BootstrapInfo },
+): Router {
   const router = Router();
 
   router.get("/health", async (_request, response) => {
@@ -42,6 +89,21 @@ export function createApiRouter(store: FileBackedSyncNodeStore): Router {
         ok: true,
         nodeId: result.nodeId,
         serverTime: result.serverTime,
+      }),
+    );
+  });
+
+  router.get("/bootstrap", async (_request, response) => {
+    const result = await store.health();
+    const bootstrap = options.getBootstrapInfo();
+
+    response.json(
+      bootstrapResponseSchema.parse({
+        ok: true,
+        nodeId: result.nodeId,
+        serverTime: result.serverTime,
+        candidateUrls: bootstrap.candidateUrls,
+        defaultCandidateUrl: bootstrap.defaultCandidateUrl,
       }),
     );
   });
@@ -91,6 +153,49 @@ export function createApiRouter(store: FileBackedSyncNodeStore): Router {
         }),
       );
     } catch (error) {
+      response.status(400).json(validationError(error instanceof Error ? error.message : "Invalid request body"));
+    }
+  });
+
+  router.post("/pairing-sessions", async (request, response) => {
+    try {
+      const body = createPairingSessionRequestSchema.parse(request.body);
+      const result = await store.createPairingSession(body);
+      response.json(
+        createPairingSessionResponseSchema.parse({
+          ok: true,
+          sessionId: result.sessionId,
+          expiresAt: result.expiresAt,
+        }),
+      );
+    } catch (error) {
+      response.status(400).json(validationError(error instanceof Error ? error.message : "Invalid request body"));
+    }
+  });
+
+  router.post("/consume-pairing-session", async (request, response) => {
+    try {
+      const body = consumePairingSessionRequestSchema.parse(request.body);
+      const result = await store.consumePairingSession({
+        sessionId: body.sessionId,
+        pairingKeyHash: hashPairingKey(body.pairingKey),
+      });
+
+      response.json(
+        consumePairingSessionResponseSchema.parse({
+          ok: true,
+          nodeId: result.nodeId,
+          serverTime: result.serverTime,
+          bundle: result.bundle,
+        }),
+      );
+    } catch (error) {
+      if (error instanceof PairingSessionStoreError) {
+        const mapped = mapPairingError(error);
+        response.status(mapped.status).json(mapped.payload);
+        return;
+      }
+
       response.status(400).json(validationError(error instanceof Error ? error.message : "Invalid request body"));
     }
   });

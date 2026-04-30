@@ -4,25 +4,54 @@ import path from "node:path";
 
 const syncNodeDataFile = path.resolve(process.cwd(), "sync-node", "data", "playwright-node-store.json");
 const syncNodeUrl = "http://127.0.0.1:4110";
-const passphrase = "correct horse battery";
-const userId = `u_e2e_sync_${Date.now()}`;
-const salt = "c3luYy10ZXN0LXNhbHQhIQ==";
 
-async function configureSync(page: import("@playwright/test").Page, deviceName: string) {
+function encodeUrlForPairing(value: string): string {
+  return Buffer.from(value, "utf8").toString("base64url");
+}
+
+async function primeEnglish(page: import("@playwright/test").Page) {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("tatac_language", "en");
+  });
+}
+
+async function enableSyncOnPc(page: import("@playwright/test").Page) {
   await page.goto("/sync-settings");
-  await page.getByLabel("sync-user-id").fill(userId);
-  await page.getByLabel("sync-node-url").fill(syncNodeUrl);
-  await page.getByLabel("sync-passphrase").fill(passphrase);
-  await page.getByRole("button", { name: "ADVANCED" }).click();
-  await page.getByLabel("sync-device-name").fill(deviceName);
-  await page.getByLabel("sync-salt").fill(salt);
-  await page.getByRole("button", { name: "SAVE SETTINGS" }).click();
+  await page.getByRole("button", { name: /enable sync on this pc/i }).click();
+  const addPhoneButton = page.getByRole("button", { name: /add phone/i });
+
+  try {
+    await expect(addPhoneButton).toBeVisible({ timeout: 5_000 });
+    return;
+  } catch {
+    const fallbackInput = page.getByLabel("sync-node-url").first();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(fallbackInput).toBeVisible({ timeout: 5_000 });
+      await fallbackInput.fill(syncNodeUrl);
+      await page.getByRole("button", { name: /enable with this url/i }).click();
+
+      try {
+        await expect(addPhoneButton).toBeVisible({ timeout: 5_000 });
+        return;
+      } catch {
+        // Retry the fallback path once more before failing the test.
+      }
+    }
+  }
+  await expect(addPhoneButton).toBeVisible({ timeout: 20_000 });
+}
+
+async function openPairingUrl(page: import("@playwright/test").Page): Promise<string> {
+  await page.goto("/sync-settings");
+  await page.getByRole("button", { name: /add phone/i }).click();
+  await expect(page.getByTestId("pairing-url")).toBeVisible({ timeout: 10_000 });
+  return (await page.getByTestId("pairing-url").textContent())?.trim() ?? "";
 }
 
 async function syncNow(page: import("@playwright/test").Page) {
   await page.goto("/sync-settings");
-  await page.getByRole("button", { name: "SYNC NOW" }).click();
-  await expect(page.getByText("Cursor")).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { name: /sync now/i }).click();
+  await expect(page.getByText(/latest run/i)).toBeVisible({ timeout: 20_000 });
 }
 
 async function createNote(page: import("@playwright/test").Page, value: string) {
@@ -61,20 +90,24 @@ test.beforeEach(async () => {
   await rm(syncNodeDataFile, { force: true });
 });
 
-test("syncs create, update, and delete across two browser contexts", async ({ browser }) => {
+test("pairs a phone with a one-time QR link and syncs create/update/delete", async ({ browser }) => {
   const deviceOne = await browser.newContext();
   const deviceTwo = await browser.newContext();
   const pageOne = await deviceOne.newPage();
   const pageTwo = await deviceTwo.newPage();
 
-  await configureSync(pageOne, "Playwright Device One");
-  await configureSync(pageTwo, "Playwright Device Two");
+  await primeEnglish(pageOne);
+  await primeEnglish(pageTwo);
 
+  await enableSyncOnPc(pageOne);
   await createNote(pageOne, "Alpha note\nCreated on device one");
   await syncNow(pageOne);
 
-  await syncNow(pageTwo);
-  await pageTwo.goto("/history");
+  const pairingUrl = await openPairingUrl(pageOne);
+  expect(pairingUrl).toContain("/sync-pair");
+
+  await pageTwo.goto(pairingUrl);
+  await pageTwo.waitForURL("**/history", { timeout: 20_000 });
   await expect(pageTwo.locator('[data-note-title="Alpha note"]').first()).toBeVisible();
 
   await updateNote(pageTwo, "Alpha note\nUpdated on device two");
@@ -91,18 +124,51 @@ test("syncs create, update, and delete across two browser contexts", async ({ br
   await pageOne.goto("/history");
   await expect(pageOne.getByText("Alpha note")).toHaveCount(0);
 
+  const deviceThree = await browser.newContext();
+  const pageThree = await deviceThree.newPage();
+  await primeEnglish(pageThree);
+  await pageThree.goto(pairingUrl);
+  await expect(pageThree.getByTestId("pairing-error")).toHaveAttribute("data-pairing-error", "already-used");
+
+  await deviceThree.close();
   await deviceOne.close();
   await deviceTwo.close();
 });
 
-test("exports and imports a .tatacsync file across two browser contexts", async ({ browser }) => {
+test("shows a node unreachable error when the pairing node cannot be reached", async ({ browser }) => {
+  const pc = await browser.newContext();
+  const phone = await browser.newContext();
+  const pageOne = await pc.newPage();
+  const pageTwo = await phone.newPage();
+
+  await primeEnglish(pageOne);
+  await primeEnglish(pageTwo);
+
+  await enableSyncOnPc(pageOne);
+  const pairingUrl = await openPairingUrl(pageOne);
+  const invalidUrl = new URL(pairingUrl);
+  invalidUrl.searchParams.set("node", encodeUrlForPairing("http://127.0.0.1:4999"));
+
+  await pageTwo.goto(invalidUrl.toString());
+  await expect(pageTwo.getByTestId("pairing-error")).toHaveAttribute("data-pairing-error", "node-unreachable");
+
+  await pc.close();
+  await phone.close();
+});
+
+test("exports and imports a .tatacsync file after QR pairing", async ({ browser }) => {
   const deviceOne = await browser.newContext();
   const deviceTwo = await browser.newContext();
   const pageOne = await deviceOne.newPage();
   const pageTwo = await deviceTwo.newPage();
 
-  await configureSync(pageOne, "Playwright Export Device");
-  await configureSync(pageTwo, "Playwright Import Device");
+  await primeEnglish(pageOne);
+  await primeEnglish(pageTwo);
+
+  await enableSyncOnPc(pageOne);
+  const pairingUrl = await openPairingUrl(pageOne);
+  await pageTwo.goto(pairingUrl);
+  await pageTwo.waitForURL("**/history", { timeout: 20_000 });
 
   await createNote(pageOne, "Manual sync note\nCreated for file fallback");
 

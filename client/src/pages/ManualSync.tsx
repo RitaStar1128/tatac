@@ -12,8 +12,9 @@ import { useLocation } from "wouter";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { getPersistedSyncSecret } from "@/domains/sync/persistedSyncSecretStore";
 import { Input } from "@/components/ui/input";
-import { getSyncSessionSecret, setSyncSessionSecret } from "@/domains/sync/sessionSecretStore";
+import { clearSyncSessionSecret, getSyncSessionSecret, setSyncSessionSecret } from "@/domains/sync/sessionSecretStore";
 import { exportTatacSyncFile, importTatacSyncFile, type ManualImportResult } from "@/domains/sync/syncEngine";
 import { getOrCreateSyncConfig } from "@/domains/sync/syncSettingsStore";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -165,7 +166,8 @@ function getFriendlyManualSyncError(error: unknown, labels: ReturnType<typeof us
 
   if (
     message.includes("Unable to decrypt the sync payload") ||
-    message.includes("passphrase is required")
+    message.includes("passphrase is required") ||
+    message.includes("sync secret is required")
   ) {
     return labels.decryptMismatch;
   }
@@ -193,12 +195,16 @@ export default function ManualSyncPage() {
   const passphraseReady = currentIdentity.passphrase.trim().length >= 8;
 
   const loadIdentity = async () => {
-    const config = await getOrCreateSyncConfig();
+    const [config, persistedSecret] = await Promise.all([getOrCreateSyncConfig(), getPersistedSyncSecret()]);
+    const resolvedPassphrase = getSyncSessionSecret()?.passphrase ?? persistedSecret?.groupSecret ?? "";
+    if (resolvedPassphrase) {
+      setSyncSessionSecret({ passphrase: resolvedPassphrase });
+    }
     setCurrentIdentity({
       userId: config.userId,
       deviceId: config.deviceId,
       salt: config.salt,
-      passphrase: getSyncSessionSecret()?.passphrase ?? "",
+      passphrase: resolvedPassphrase,
     });
   };
 
@@ -209,7 +215,11 @@ export default function ManualSyncPage() {
   const handlePassphraseChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const passphrase = event.target.value;
     setCurrentIdentity((current) => ({ ...current, passphrase }));
-    setSyncSessionSecret({ passphrase });
+    if (passphrase.trim().length >= 8) {
+      setSyncSessionSecret({ passphrase });
+    } else {
+      clearSyncSessionSecret();
+    }
     setStatusMessage({
       tone: passphrase.trim().length >= 8 ? "success" : "warning",
       text: passphrase.trim().length >= 8 ? labels.passphraseReady : labels.needPassphrase,

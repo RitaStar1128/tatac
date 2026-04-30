@@ -1,11 +1,15 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
-import type { EncryptedEnvelope } from "../../../shared/contracts";
+import type {
+  EncryptedEnvelope,
+  PairingBundle,
+} from "../../../shared/contracts";
 import type {
   PullItem,
   RegisterDeviceRequest,
 } from "../../../shared/contracts";
+import { pairingSessionRecordSchema } from "../../../shared/contracts";
 
 import {
   syncNodeStoreSchema,
@@ -24,6 +28,30 @@ function createEmptyBucket(): UserBucket {
     devices: {},
     items: [],
   };
+}
+
+function isExpired(expiresAt: string, referenceTime = Date.now()): boolean {
+  return Date.parse(expiresAt) <= referenceTime;
+}
+
+function purgeExpiredPairingSessions(store: SyncNodeStore, referenceTime = Date.now()): void {
+  for (const [sessionId, record] of Object.entries(store.pairingSessions)) {
+    if (record.consumedAt && isExpired(record.expiresAt, referenceTime)) {
+      delete store.pairingSessions[sessionId];
+    }
+  }
+}
+
+export class PairingSessionStoreError extends Error {
+  code: "PAIRING_NOT_FOUND" | "PAIRING_EXPIRED" | "PAIRING_ALREADY_USED" | "INVALID_PAIRING_KEY";
+
+  constructor(
+    code: "PAIRING_NOT_FOUND" | "PAIRING_EXPIRED" | "PAIRING_ALREADY_USED" | "INVALID_PAIRING_KEY",
+    message: string,
+  ) {
+    super(message);
+    this.code = code;
+  }
 }
 
 export class FileBackedSyncNodeStore {
@@ -45,12 +73,17 @@ export class FileBackedSyncNodeStore {
 
     try {
       const raw = await fs.readFile(this.filePath, "utf8");
-      return syncNodeStoreSchema.parse(JSON.parse(raw));
+      const parsed = JSON.parse(raw) as Partial<SyncNodeStore>;
+      return syncNodeStoreSchema.parse({
+        pairingSessions: {},
+        ...parsed,
+      });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return {
           nodeId: this.nodeId,
           users: {},
+          pairingSessions: {},
         };
       }
 
@@ -59,6 +92,7 @@ export class FileBackedSyncNodeStore {
   }
 
   private async writeStore(store: SyncNodeStore): Promise<void> {
+    purgeExpiredPairingSessions(store);
     await this.ensureParentDirectory();
     await fs.writeFile(this.filePath, `${JSON.stringify(syncNodeStoreSchema.parse(store), null, 2)}\n`, "utf8");
   }
@@ -136,5 +170,60 @@ export class FileBackedSyncNodeStore {
       nextAfterSeq,
       hasMore,
     };
+  }
+
+  async createPairingSession(input: {
+    pairingKeyHash: string;
+    bundle: PairingBundle;
+  }): Promise<{ sessionId: string; expiresAt: string }> {
+    return this.mutate((store) => {
+      const sessionId = `ps_${crypto.randomUUID()}`;
+      const record = pairingSessionRecordSchema.parse({
+        sessionId,
+        pairingKeyHash: input.pairingKeyHash,
+        bundle: input.bundle,
+        createdAt: nowIso(),
+        expiresAt: input.bundle.expiresAt,
+      });
+
+      store.pairingSessions[sessionId] = record;
+
+      return {
+        sessionId,
+        expiresAt: record.expiresAt,
+      };
+    });
+  }
+
+  async consumePairingSession(input: {
+    sessionId: string;
+    pairingKeyHash: string;
+  }): Promise<{ nodeId: string; serverTime: string; bundle: PairingBundle }> {
+    return this.mutate((store) => {
+      const record = store.pairingSessions[input.sessionId];
+      if (!record) {
+        throw new PairingSessionStoreError("PAIRING_NOT_FOUND", "This pairing code was not found.");
+      }
+
+      if (isExpired(record.expiresAt)) {
+        delete store.pairingSessions[input.sessionId];
+        throw new PairingSessionStoreError("PAIRING_EXPIRED", "This pairing code has expired.");
+      }
+
+      if (record.consumedAt) {
+        throw new PairingSessionStoreError("PAIRING_ALREADY_USED", "This pairing code has already been used.");
+      }
+
+      if (record.pairingKeyHash !== input.pairingKeyHash) {
+        throw new PairingSessionStoreError("INVALID_PAIRING_KEY", "This pairing code is invalid.");
+      }
+
+      record.consumedAt = nowIso();
+      return {
+        nodeId: store.nodeId,
+        serverTime: nowIso(),
+        bundle: record.bundle,
+      };
+    });
   }
 }

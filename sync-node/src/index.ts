@@ -2,11 +2,55 @@ import express from "express";
 import os from "node:os";
 import path from "node:path";
 
-import { createApiRouter } from "./routes/api";
+import { createApiRouter, type BootstrapInfo } from "./routes/api";
 import { FileBackedSyncNodeStore } from "./services/fileStore";
 
 function createNodeId(): string {
   return `node_${os.hostname().replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase()}`;
+}
+
+function isLoopbackHost(host: string): boolean {
+  return host === "127.0.0.1" || host === "localhost";
+}
+
+function isWildcardHost(host: string): boolean {
+  return host === "0.0.0.0" || host === "::";
+}
+
+function buildCandidateUrls(host: string, port: number): string[] {
+  if (isLoopbackHost(host)) {
+    return [`http://127.0.0.1:${port}`];
+  }
+
+  if (!isWildcardHost(host)) {
+    return [`http://${host}:${port}`];
+  }
+
+  const candidates = new Set<string>();
+  const interfaces = os.networkInterfaces();
+
+  for (const addresses of Object.values(interfaces)) {
+    for (const address of addresses ?? []) {
+      if (address.family !== "IPv4" || address.internal) {
+        continue;
+      }
+      candidates.add(`http://${address.address}:${port}`);
+    }
+  }
+
+  if (candidates.size === 0) {
+    candidates.add(`http://127.0.0.1:${port}`);
+  }
+
+  return Array.from(candidates);
+}
+
+function getBootstrapInfo(host: string, port: number): BootstrapInfo {
+  const candidateUrls = buildCandidateUrls(host, port);
+  return {
+    candidateUrls,
+    defaultCandidateUrl: candidateUrls[0],
+  };
 }
 
 const app = express();
@@ -31,9 +75,16 @@ app.use((request, response, next) => {
 });
 
 app.use(express.json({ limit: "5mb" }));
-app.use("/api/v1", createApiRouter(store));
+app.use(
+  "/api/v1",
+  createApiRouter(store, {
+    getBootstrapInfo: () => getBootstrapInfo(host, port),
+  }),
+);
 
 app.listen(port, host, () => {
+  const bootstrap = getBootstrapInfo(host, port);
   console.log(`Sync node listening on http://${host}:${port}`);
   console.log(`Sync node data file: ${dataFile}`);
+  console.log(`Sync node bootstrap candidates: ${bootstrap.candidateUrls.join(", ")}`);
 });

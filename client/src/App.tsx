@@ -12,6 +12,7 @@ import History from "./pages/History";
 import Edit from "./pages/Edit";
 import SyncSettingsPage from "./pages/SyncSettings";
 import ManualSyncPage from "./pages/ManualSync";
+import SyncPairPage from "./pages/SyncPair";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
       <Route path="/history" component={History} />
       <Route path="/edit/:id" component={Edit} />
       <Route path="/sync-settings" component={SyncSettingsPage} />
+      <Route path="/sync-pair" component={SyncPairPage} />
       <Route path="/manual-sync" component={ManualSyncPage} />
       <Route component={NotFound} />
     </Switch>
