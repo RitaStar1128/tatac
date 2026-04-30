@@ -74,34 +74,45 @@ function useLabels(language: "ja" | "en") {
       language === "ja"
         ? {
             title: "同期",
-            subtitle: "必要なのは node URL、user ID、passphrase だけです。",
+            subtitle: "下の3つを埋めれば同期できます。",
             back: "ホームに戻る",
             manual: "ファイル同期",
-            nodeUrl: "Sync Node URL",
-            userId: "User ID",
-            passphrase: "Passphrase",
-            deviceName: "端末名",
-            salt: "Group Salt",
-            deviceId: "Device ID",
-            primaryHint: "他の端末でも同じ user ID と passphrase を使ってください。",
-            passphraseHint: "passphrase はこの browser session にだけ保持されます。",
+            setupTitle: "まず入れるもの",
+            setupBody: "他の端末でも同じ user ID と passphrase を使ってください。",
+            nodeUrl: "同期先 URL",
+            nodeUrlHint: "家のPCやNASで動かしている sync-node の URL です。",
+            nodeUrlExample: "例: http://192.168.0.10:4010",
+            userId: "同期名",
+            userIdSub: "User ID",
+            userIdHint: "同じメモを共有したい端末どうしで同じ名前を使います。",
+            userIdExample: "例: rita-home",
+            passphrase: "合言葉",
+            passphraseSub: "Passphrase",
+            passphraseHint: "8文字以上。同じ端末どうしで同じ合言葉を使います。",
+            passphraseExample: "例: blue-cat-2026",
+            passphraseStorage: "この browser session にだけ保持されます。",
             passphraseReady: "session に保持中",
             passphraseMissing: "未入力",
             save: "設定を保存",
             health: "接続確認",
             syncNow: "今すぐ同期",
-            needUserId: "User ID を入力してください。",
-            needNodeUrl: "Sync Node URL を入力してください。",
-            needPassphrase: "8文字以上の passphrase を入力してください。",
+            needUserId: "同期名を入力してください。",
+            needNodeUrl: "同期先 URL を入力してください。",
+            needPassphrase: "8文字以上の合言葉を入力してください。",
             saveSuccess: "同期設定を保存しました。",
             saveFailed: "同期設定の保存に失敗しました。",
-            healthOk: "同期ノードに接続できました。",
-            healthFailed: "同期ノードに接続できませんでした。",
+            healthOk: "同期先に接続できました。",
+            healthFailed: "同期先に接続できませんでした。",
             syncOk: "同期が完了しました。",
             syncFailed: "同期に失敗しました。",
             advanced: "詳細設定",
             hideAdvanced: "詳細を閉じる",
-            advancedHint: "salt と端末名は通常変更不要です。",
+            advancedHint: "通常は変更不要です。新しい同期グループを作る時だけ触ってください。",
+            deviceName: "端末名",
+            deviceNameHint: "他の端末と区別するための名前です。",
+            salt: "Group Salt",
+            saltHint: "違う同期グループを新しく作る時だけ変更します。",
+            deviceId: "Device ID",
             nodeId: "Node ID",
             lastSync: "最終同期",
             never: "未実行",
@@ -115,34 +126,45 @@ function useLabels(language: "ja" | "en") {
           }
         : {
             title: "SYNC",
-            subtitle: "Most setups only need a node URL, user ID, and passphrase.",
+            subtitle: "Fill these three fields to start syncing.",
             back: "Back to home",
             manual: "File sync",
+            setupTitle: "WHAT TO ENTER FIRST",
+            setupBody: "Use the same user ID and passphrase on the other device.",
             nodeUrl: "Sync Node URL",
-            userId: "User ID",
-            passphrase: "Passphrase",
-            deviceName: "Device Name",
-            salt: "Group Salt",
-            deviceId: "Device ID",
-            primaryHint: "Use the same user ID and passphrase on the other device.",
-            passphraseHint: "The passphrase is kept in this browser session only.",
+            nodeUrlHint: "The URL where your home sync-node is running.",
+            nodeUrlExample: "Example: http://192.168.0.10:4010",
+            userId: "Sync Name",
+            userIdSub: "User ID",
+            userIdHint: "Use the same value on every device that should share notes.",
+            userIdExample: "Example: rita-home",
+            passphrase: "Shared Secret",
+            passphraseSub: "Passphrase",
+            passphraseHint: "At least 8 characters. Use the same one on every synced device.",
+            passphraseExample: "Example: blue-cat-2026",
+            passphraseStorage: "Stored in this browser session only.",
             passphraseReady: "Stored in this session",
             passphraseMissing: "Not entered",
             save: "SAVE SETTINGS",
             health: "CHECK CONNECTION",
             syncNow: "SYNC NOW",
-            needUserId: "Enter a user ID.",
+            needUserId: "Enter a sync name.",
             needNodeUrl: "Enter a sync node URL.",
-            needPassphrase: "Enter a passphrase with at least 8 characters.",
+            needPassphrase: "Enter a shared secret with at least 8 characters.",
             saveSuccess: "Sync settings saved.",
             saveFailed: "Failed to save sync settings.",
-            healthOk: "Sync node reachable.",
-            healthFailed: "Failed to reach the sync node.",
+            healthOk: "Sync destination reachable.",
+            healthFailed: "Failed to reach the sync destination.",
             syncOk: "Sync completed.",
             syncFailed: "Sync failed.",
             advanced: "ADVANCED",
             hideAdvanced: "HIDE ADVANCED",
-            advancedHint: "You usually do not need to change salt or device name.",
+            advancedHint: "You usually do not need these. Change them only when creating a different sync group.",
+            deviceName: "Device Name",
+            deviceNameHint: "Used only to identify this device.",
+            salt: "Group Salt",
+            saltHint: "Change this only if you want to start a completely different sync group.",
+            deviceId: "Device ID",
             nodeId: "Node ID",
             lastSync: "Last Sync",
             never: "Never",
@@ -434,13 +456,13 @@ export default function SyncSettingsPage() {
               <RadioTower className="h-4 w-4" />
             </span>
             <div>
-              <h2 className="font-black uppercase tracking-widest">{labels.title}</h2>
-              <p className="text-sm text-muted-foreground">{labels.primaryHint}</p>
+              <h2 className="font-black uppercase tracking-widest">{labels.setupTitle}</h2>
+              <p className="text-sm text-muted-foreground">{labels.setupBody}</p>
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <label className="block space-y-2 md:col-span-2">
+          <div className="grid gap-4">
+            <label className="block space-y-2">
               <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                 {labels.nodeUrl}
               </span>
@@ -448,49 +470,59 @@ export default function SyncSettingsPage() {
                 aria-label="sync-node-url"
                 value={form.syncNodeUrl}
                 onChange={handleChange("syncNodeUrl")}
-                placeholder="http://192.168.0.10:4010"
-                className="rounded-none border-2"
+                placeholder={labels.nodeUrlExample}
+                className="rounded-none border-2 placeholder:text-muted-foreground/60"
               />
+              <p className="text-xs text-muted-foreground">{labels.nodeUrlHint}</p>
             </label>
 
             <label className="block space-y-2">
               <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                 {labels.userId}
+                <span className="ml-2 text-[10px] font-medium tracking-[0.12em] text-muted-foreground/80">
+                  {labels.userIdSub}
+                </span>
               </span>
               <Input
                 aria-label="sync-user-id"
                 value={form.userId}
                 onChange={handleChange("userId")}
-                className="rounded-none border-2"
+                placeholder={labels.userIdExample}
+                className="rounded-none border-2 placeholder:text-muted-foreground/60"
               />
+              <p className="text-xs text-muted-foreground">{labels.userIdHint}</p>
             </label>
 
             <label className="block space-y-2">
               <span className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                 {labels.passphrase}
+                <span className="ml-2 text-[10px] font-medium tracking-[0.12em] text-muted-foreground/80">
+                  {labels.passphraseSub}
+                </span>
               </span>
               <Input
                 aria-label="sync-passphrase"
                 type="password"
                 value={form.passphrase}
                 onChange={handleChange("passphrase")}
-                placeholder="session-only"
-                className="rounded-none border-2"
+                placeholder={labels.passphraseExample}
+                className="rounded-none border-2 placeholder:text-muted-foreground/60"
               />
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="text-muted-foreground">
+                  {labels.passphraseHint} {labels.passphraseStorage}
+                </span>
+                <span
+                  className={`border px-2 py-1 font-black uppercase tracking-[0.18em] ${
+                    passphraseReady
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border text-muted-foreground"
+                  }`}
+                >
+                  {passphraseReady ? labels.passphraseReady : labels.passphraseMissing}
+                </span>
+              </div>
             </label>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-muted-foreground">{labels.passphraseHint}</span>
-            <span
-              className={`border px-2 py-1 font-black uppercase tracking-[0.18em] ${
-                passphraseReady
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border text-muted-foreground"
-              }`}
-            >
-              {passphraseReady ? labels.passphraseReady : labels.passphraseMissing}
-            </span>
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -553,8 +585,10 @@ export default function SyncSettingsPage() {
                     aria-label="sync-device-name"
                     value={form.deviceName}
                     onChange={handleChange("deviceName")}
-                    className="rounded-none border-2"
+                    placeholder={form.deviceName || "Rita iPhone"}
+                    className="rounded-none border-2 placeholder:text-muted-foreground/60"
                   />
+                  <p className="text-xs text-muted-foreground">{labels.deviceNameHint}</p>
                 </label>
 
                 <label className="block space-y-2">
@@ -565,8 +599,10 @@ export default function SyncSettingsPage() {
                     aria-label="sync-salt"
                     value={form.salt}
                     onChange={handleChange("salt")}
-                    className="rounded-none border-2 font-mono text-xs"
+                    placeholder={form.salt}
+                    className="rounded-none border-2 font-mono text-xs placeholder:text-muted-foreground/60"
                   />
+                  <p className="text-xs text-muted-foreground">{labels.saltHint}</p>
                 </label>
               </div>
 

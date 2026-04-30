@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { History, RadioTower, Save, Settings, Smartphone } from "lucide-react";
+import { motion } from "framer-motion";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ export default function Home() {
   const textRef = useRef(text);
   const savingRef = useRef(false);
   const hasDraft = text.trim().length > 0;
+  const floatingSaveClearance = "calc(7rem + env(safe-area-inset-bottom))";
   const copy =
     language === "ja"
       ? {
@@ -192,34 +194,19 @@ export default function Home() {
               <span>TATAC</span>
             </h1>
 
-            <div className="flex items-center gap-2">
-              {!isPWA && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => pwaPromptRef.current?.open()}
-                  aria-label={copy.installAria}
-                  title={copy.installAria}
-                  className="rounded-none border-2 border-foreground font-bold"
-                >
-                  <Smartphone className="h-4 w-4" />
-                  <span className="hidden sm:inline">{copy.openInstall}</span>
-                </Button>
-              )}
-
+            {!isPWA && (
               <Button
-                onClick={() => {
-                  void saveMemo();
-                }}
-                disabled={!hasDraft || isSaving}
-                aria-label={copy.saveAria}
-                title={copy.saveAria}
-                className="rounded-none border-2 border-foreground bg-foreground font-black uppercase tracking-[0.2em] text-background hover:bg-foreground/90 disabled:opacity-40"
+                variant="outline"
+                size="sm"
+                onClick={() => pwaPromptRef.current?.open()}
+                aria-label={copy.installAria}
+                title={copy.installAria}
+                className="rounded-none border-2 border-foreground font-bold"
               >
-                <Save className="h-4 w-4" />
-                <span className="hidden sm:inline">{copy.save}</span>
+                <Smartphone className="h-4 w-4" />
+                <span className="hidden sm:inline">{copy.openInstall}</span>
               </Button>
-            </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -274,8 +261,39 @@ export default function Home() {
           onKeyDown={handleKeyDown}
           placeholder={t("newMemoPlaceholder")}
           className="h-full w-full flex-1 resize-none border-none bg-transparent p-6 text-lg leading-relaxed placeholder:text-muted-foreground/30 focus-visible:ring-0 md:text-xl"
+          style={
+            hasDraft
+              ? {
+                  paddingBottom: floatingSaveClearance,
+                  scrollPaddingBottom: floatingSaveClearance,
+                }
+              : undefined
+          }
           spellCheck={false}
         />
+
+        {hasDraft && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50"
+          >
+            <Button
+              onClick={() => {
+                void saveMemo();
+                textareaRef.current?.focus();
+              }}
+              size="lg"
+              disabled={isSaving}
+              aria-label={copy.saveAria}
+              title={copy.saveAria}
+              className="flex h-14 w-14 items-center justify-center rounded-full border-2 border-foreground bg-foreground text-background shadow-xl hover:bg-foreground/90"
+            >
+              <Save className="h-6 w-6" />
+            </Button>
+          </motion.div>
+        )}
       </main>
 
       <SettingsModal
