@@ -58,19 +58,22 @@ function requirePassphrase(): string {
   return secret.passphrase;
 }
 
-async function getActiveSyncConfig(): Promise<ActiveSyncConfig> {
+async function getActiveSyncConfig(syncNodeUrlOverride?: string): Promise<ActiveSyncConfig> {
   const config = await getOrCreateSyncConfig();
-  if (!config.syncNodeUrl) {
+  const syncNodeUrl = syncNodeUrlOverride?.trim() || config.syncNodeUrl;
+  if (!syncNodeUrl) {
     throw new Error("Sync node URL is not configured.");
   }
   return {
     ...config,
-    syncNodeUrl: config.syncNodeUrl,
+    syncNodeUrl,
   };
 }
 
-export async function checkSyncNodeHealth(): Promise<{ nodeId: string; serverTime: string }> {
-  const config = await getActiveSyncConfig();
+export async function checkSyncNodeHealth(
+  syncNodeUrlOverride?: string,
+): Promise<{ nodeId: string; serverTime: string }> {
+  const config = await getActiveSyncConfig(syncNodeUrlOverride);
   const health = await fetchHealth(config.syncNodeUrl);
   return {
     nodeId: health.nodeId,

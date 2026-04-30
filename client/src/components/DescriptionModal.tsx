@@ -14,11 +14,16 @@ interface DescriptionModalProps {
 }
 
 export function DescriptionModal({ isOpen, onClose }: DescriptionModalProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const isMobile = useIsMobile();
   const usageKeys = isMobile
     ? ["aboutMobileBullet1", "aboutMobileBullet2", "aboutMobileBullet3", "aboutMobileBullet4"]
     : ["aboutPcBullet1", "aboutPcBullet2", "aboutPcBullet3", "aboutPcBullet4"];
+  const featureChips =
+    language === "ja"
+      ? ["アカウント不要", "この端末に保存", "あとで同期可能"]
+      : ["No account", "Saved on this device", "Sync later if needed"];
+  const primaryActionLabel = language === "ja" ? "書き始める" : "START WRITING";
 
   return (
     <AnimatePresence>
@@ -46,6 +51,8 @@ export function DescriptionModal({ isOpen, onClose }: DescriptionModalProps) {
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
+                aria-label={t("close")}
+                title={t("close")}
                 className="rounded-none hover:bg-destructive hover:text-destructive-foreground transition-colors"
               >
                 <X className="w-6 h-6" />
@@ -53,6 +60,17 @@ export function DescriptionModal({ isOpen, onClose }: DescriptionModalProps) {
             </div>
 
             <div className="space-y-6 p-6 overflow-y-auto flex-1 modal-scroll">
+              <div className="flex flex-wrap gap-2">
+                {featureChips.map((chip) => (
+                  <span
+                    key={chip}
+                    className="border border-border bg-muted px-2.5 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground"
+                  >
+                    {chip}
+                  </span>
+                ))}
+              </div>
+
               <div className="space-y-3">
                 <h3 className="font-bold text-lg mb-2 border-b-2 border-foreground inline-block">
                   {t("aboutPhilosophyTitle")}
@@ -80,6 +98,15 @@ export function DescriptionModal({ isOpen, onClose }: DescriptionModalProps) {
                   </ul>
                 </div>
               </div>
+            </div>
+
+            <div className="border-t-2 border-foreground bg-card px-6 py-4">
+              <Button
+                onClick={onClose}
+                className="w-full rounded-none border-2 border-foreground bg-foreground font-black uppercase tracking-[0.2em] text-background hover:bg-foreground/90"
+              >
+                {primaryActionLabel}
+              </Button>
             </div>
           </motion.div>
         </motion.div>

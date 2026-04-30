@@ -1,14 +1,21 @@
-import { X, Monitor, Moon, Sun, Globe, Smartphone, Settings as SettingsIcon, RefreshCw, RadioTower } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { useLanguage } from "@/contexts/LanguageContext";
-import { useTheme } from "@/contexts/ThemeContext";
-import { Button } from "@/components/ui/button";
-import { useIsMobile } from "@/hooks/useMobile";
+import {
+  Globe,
+  Monitor,
+  Moon,
+  RadioTower,
+  RefreshCw,
+  Settings as SettingsIcon,
+  Smartphone,
+  Sun,
+  X,
+} from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useLocation } from "wouter";
 
-// UX_RATIONALE:
-// - modal_design: DescriptionModalと統一されたデザイン。
-// - direct_manipulation: 設定変更が即座に反映されるUI。
+import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useTheme } from "@/contexts/ThemeContext";
+import { useIsMobile } from "@/hooks/useMobile";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -21,6 +28,20 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
   const { theme, setTheme } = useTheme();
   const isMobile = useIsMobile();
   const [, setLocation] = useLocation();
+  const syncLabels =
+    language === "ja"
+      ? {
+          sync: "同期",
+          openSync: "同期設定を開く",
+          openManual: "手動同期を開く",
+          close: "設定を閉じる",
+        }
+      : {
+          sync: "SYNC",
+          openSync: "OPEN SYNC SETTINGS",
+          openManual: "OPEN MANUAL SYNC",
+          close: "Close settings",
+        };
 
   return (
     <AnimatePresence>
@@ -29,20 +50,20 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
           onClick={onClose}
         >
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-card border-2 border-foreground shadow-none relative max-h-[80vh] flex flex-col overflow-hidden"
+            onClick={(event) => event.stopPropagation()}
+            className="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden border-2 border-foreground bg-card shadow-none"
           >
-            <div className="flex justify-between items-center border-b-2 border-foreground bg-card px-6 py-4 sticky top-0 z-10">
-              <h2 className="text-xl font-black tracking-tighter uppercase flex items-center gap-2">
-                <span className="bg-foreground text-background px-2 py-1">
-                  <SettingsIcon className="w-4 h-4" />
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b-2 border-foreground bg-card px-6 py-4">
+              <h2 className="flex items-center gap-2 text-xl font-black uppercase tracking-tighter">
+                <span className="bg-foreground px-2 py-1 text-background">
+                  <SettingsIcon className="h-4 w-4" />
                 </span>
                 {t("settings")}
               </h2>
@@ -50,36 +71,37 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                className="rounded-none hover:bg-destructive hover:text-destructive-foreground transition-colors"
+                aria-label={syncLabels.close}
+                title={syncLabels.close}
+                className="rounded-none transition-colors hover:bg-destructive hover:text-destructive-foreground"
               >
-                <X className="w-6 h-6" />
+                <X className="h-6 w-6" />
               </Button>
             </div>
 
-            <div className="space-y-8 p-6 overflow-y-auto flex-1 modal-scroll">
-              {/* Language Section */}
+            <div className="modal-scroll flex-1 space-y-8 overflow-y-auto p-6">
               <div className="space-y-3">
-                <label className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                  <Globe className="w-3 h-3" />
+                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  <Globe className="h-3 w-3" />
                   {t("language")}
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setLanguage("ja")}
-                    className={`p-3 text-sm font-bold border-2 transition-all ${
+                    className={`border-2 p-3 text-sm font-bold transition-all ${
                       language === "ja"
-                        ? "bg-accent text-accent-foreground border-accent"
-                        : "bg-transparent border-muted-foreground/20 hover:border-foreground"
+                        ? "border-accent bg-accent text-accent-foreground"
+                        : "border-muted-foreground/20 bg-transparent hover:border-foreground"
                     }`}
                   >
                     {t("languageJa")}
                   </button>
                   <button
                     onClick={() => setLanguage("en")}
-                    className={`p-3 text-sm font-bold border-2 transition-all ${
+                    className={`border-2 p-3 text-sm font-bold transition-all ${
                       language === "en"
-                        ? "bg-accent text-accent-foreground border-accent"
-                        : "bg-transparent border-muted-foreground/20 hover:border-foreground"
+                        ? "border-accent bg-accent text-accent-foreground"
+                        : "border-muted-foreground/20 bg-transparent hover:border-foreground"
                     }`}
                   >
                     {t("languageEn")}
@@ -87,44 +109,43 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
                 </div>
               </div>
 
-              {/* Theme Section */}
               <div className="space-y-3">
-                <label className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                  <Moon className="w-3 h-3" />
+                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  <Moon className="h-3 w-3" />
                   {t("theme")}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
                     onClick={() => setTheme("light")}
-                    className={`p-3 flex flex-col items-center gap-2 border-2 transition-all ${
+                    className={`flex flex-col items-center gap-2 border-2 p-3 transition-all ${
                       theme === "light"
-                        ? "bg-accent text-accent-foreground border-accent"
-                        : "bg-transparent border-muted-foreground/20 hover:border-foreground"
+                        ? "border-accent bg-accent text-accent-foreground"
+                        : "border-muted-foreground/20 bg-transparent hover:border-foreground"
                     }`}
                   >
-                    <Sun className="w-5 h-5" />
+                    <Sun className="h-5 w-5" />
                     <span className="text-xs font-bold">{t("light")}</span>
                   </button>
                   <button
                     onClick={() => setTheme("dark")}
-                    className={`p-3 flex flex-col items-center gap-2 border-2 transition-all ${
+                    className={`flex flex-col items-center gap-2 border-2 p-3 transition-all ${
                       theme === "dark"
-                        ? "bg-accent text-accent-foreground border-accent"
-                        : "bg-transparent border-muted-foreground/20 hover:border-foreground"
+                        ? "border-accent bg-accent text-accent-foreground"
+                        : "border-muted-foreground/20 bg-transparent hover:border-foreground"
                     }`}
                   >
-                    <Moon className="w-5 h-5" />
+                    <Moon className="h-5 w-5" />
                     <span className="text-xs font-bold">{t("dark")}</span>
                   </button>
                   <button
                     onClick={() => setTheme("system")}
-                    className={`p-3 flex flex-col items-center gap-2 border-2 transition-all ${
+                    className={`flex flex-col items-center gap-2 border-2 p-3 transition-all ${
                       theme === "system"
-                        ? "bg-accent text-accent-foreground border-accent"
-                        : "bg-transparent border-muted-foreground/20 hover:border-foreground"
+                        ? "border-accent bg-accent text-accent-foreground"
+                        : "border-muted-foreground/20 bg-transparent hover:border-foreground"
                     }`}
                   >
-                    <Monitor className="w-5 h-5" />
+                    <Monitor className="h-5 w-5" />
                     <span className="text-xs font-bold">{t("system")}</span>
                   </button>
                 </div>
@@ -132,14 +153,14 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
 
               {!isMobile && onOpenMobileQr && (
                 <div className="space-y-3">
-                  <label className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                    <Smartphone className="w-3 h-3" />
+                  <label className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
+                    <Smartphone className="h-3 w-3" />
                     {t("mobileQr")}
                   </label>
                   <Button
                     variant="outline"
                     onClick={onOpenMobileQr}
-                    className="w-full border-2 border-foreground hover:bg-accent font-bold rounded-none"
+                    className="w-full rounded-none border-2 border-foreground font-bold hover:bg-accent"
                   >
                     {t("mobileQrButton")}
                   </Button>
@@ -147,9 +168,9 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
               )}
 
               <div className="space-y-3">
-                <label className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                  <RadioTower className="w-3 h-3" />
-                  {language === "ja" ? "同期" : "SYNC"}
+                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
+                  <RadioTower className="h-3 w-3" />
+                  {syncLabels.sync}
                 </label>
                 <div className="grid gap-2">
                   <Button
@@ -158,10 +179,10 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
                       onClose();
                       setLocation("/sync-settings");
                     }}
-                    className="w-full border-2 border-foreground hover:bg-accent font-bold rounded-none justify-start"
+                    className="w-full justify-start rounded-none border-2 border-foreground font-bold hover:bg-accent"
                   >
                     <RadioTower className="mr-2 h-4 w-4" />
-                    {language === "ja" ? "同期設定を開く" : "OPEN SYNC SETTINGS"}
+                    {syncLabels.openSync}
                   </Button>
                   <Button
                     variant="outline"
@@ -169,10 +190,10 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
                       onClose();
                       setLocation("/manual-sync");
                     }}
-                    className="w-full border-2 border-foreground hover:bg-accent font-bold rounded-none justify-start"
+                    className="w-full justify-start rounded-none border-2 border-foreground font-bold hover:bg-accent"
                   >
                     <RefreshCw className="mr-2 h-4 w-4" />
-                    {language === "ja" ? "手動同期UIを開く" : "OPEN MANUAL SYNC"}
+                    {syncLabels.openManual}
                   </Button>
                 </div>
               </div>

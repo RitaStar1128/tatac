@@ -141,16 +141,24 @@ export async function decryptEnvelopeToNoteOp(
     throw new Error("Envelope recipient does not match the active sync group.");
   }
 
-  const decrypted = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: decodeBase64(parsedEnvelope.nonce),
-      additionalData: aadBytes,
-      tagLength: 128,
-    },
-    key,
-    decodeBase64(parsedEnvelope.cipherText),
-  );
+  let decrypted: ArrayBuffer;
+
+  try {
+    decrypted = await crypto.subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: decodeBase64(parsedEnvelope.nonce),
+        additionalData: aadBytes,
+        tagLength: 128,
+      },
+      key,
+      decodeBase64(parsedEnvelope.cipherText),
+    );
+  } catch {
+    throw new Error(
+      "Unable to decrypt the sync payload. Check that the passphrase and sync group match.",
+    );
+  }
 
   return {
     aad,

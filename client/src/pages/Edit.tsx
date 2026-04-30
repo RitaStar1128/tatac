@@ -14,7 +14,7 @@ import type { StoredNoteRecord } from "@/db/tatacDb";
 export default function Edit() {
   const [, params] = useRoute("/edit/:id");
   const [, setLocation] = useLocation();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const isMobile = useIsMobile();
   const [text, setText] = useState("");
   const [originalRecord, setOriginalRecord] = useState<StoredNoteRecord | null>(null);
@@ -29,6 +29,18 @@ export default function Edit() {
     normalizedText.length > 0 &&
     normalizedText !== normalizedOriginalText &&
     !isSaving;
+  const copy =
+    language === "ja"
+      ? {
+          backAria: "履歴に戻る",
+          saveAria: "編集内容を保存する",
+          helper: "Enter で改行。Ctrl/Cmd+Enter で保存できます。",
+        }
+      : {
+          backAria: "Back to history",
+          saveAria: "Save edited note",
+          helper: "Press Enter for a new line. Press Ctrl/Cmd+Enter to save.",
+        };
 
   useEffect(() => {
     let cancelled = false;
@@ -156,6 +168,8 @@ export default function Edit() {
               }
               setLocation("/history");
             }}
+            aria-label={copy.backAria}
+            title={copy.backAria}
             className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -176,6 +190,8 @@ export default function Edit() {
               void saveEdit();
             }}
             disabled={!canSave}
+            aria-label={copy.saveAria}
+            title={copy.saveAria}
             className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <Save className="w-5 h-5" />
@@ -184,6 +200,9 @@ export default function Edit() {
       </header>
 
       <main className="flex-1 relative flex flex-col">
+        <div className="border-b border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+          {copy.helper}
+        </div>
         <Textarea
           ref={textareaRef}
           value={text}
@@ -212,6 +231,8 @@ export default function Edit() {
                 void saveEdit();
               }}
               size="lg"
+              aria-label={copy.saveAria}
+              title={copy.saveAria}
               className="rounded-full w-14 h-14 shadow-xl border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold flex items-center justify-center"
             >
               <Save className="w-6 h-6" />

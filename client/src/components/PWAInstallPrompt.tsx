@@ -15,7 +15,12 @@ export interface PWAInstallPromptHandle {
   open: () => void;
 }
 
-export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
+interface PWAInstallPromptProps {
+  allowAutoPrompt?: boolean;
+}
+
+export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle, PWAInstallPromptProps>(
+  ({ allowAutoPrompt = true }, ref) => {
   const { t } = useLanguage();
   const isMobile = useIsMobile();
   const [isPWA, setIsPWA] = useState(false);
@@ -46,13 +51,15 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
     setCurrentUrl(window.location.href);
 
     // Show banner if mobile and not PWA, and NOT already dismissed
-    if (isMobile && !isStandalone) {
+    if (allowAutoPrompt && isMobile && !isStandalone) {
       const hasDismissed = localStorage.getItem("tatac_pwa_banner_dismissed");
       if (!hasDismissed) {
         setShowBanner(true);
       }
+    } else {
+      setShowBanner(false);
     }
-  }, [isMobile]);
+  }, [allowAutoPrompt, isMobile]);
 
   const handleDismissBanner = () => {
     setShowBanner(false);
@@ -85,6 +92,8 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowPcQr(false)}
+                  aria-label={t("close")}
+                  title={t("close")}
                   className="absolute right-2 top-2 rounded-none hover:bg-destructive hover:text-destructive-foreground transition-colors"
                 >
                   <X className="w-6 h-6" />
@@ -145,6 +154,8 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                 </Button>
                 <button 
                   onClick={handleDismissBanner}
+                  aria-label={t("close")}
+                  title={t("close")}
                   className="p-2 hover:bg-background/20 rounded-sm transition-colors"
                 >
                   <X className="w-5 h-5" strokeWidth={3} />
@@ -183,6 +194,8 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
                   variant="ghost"
                   size="icon"
                   onClick={() => setShowModal(false)}
+                  aria-label={t("close")}
+                  title={t("close")}
                   className="rounded-none hover:bg-destructive hover:text-destructive-foreground transition-colors"
                 >
                   <X className="w-6 h-6" />
@@ -272,7 +285,7 @@ export const PWAInstallPrompt = forwardRef<PWAInstallPromptHandle>((_, ref) => {
               </div>
             </motion.div>
           </motion.div>
-        )}
+        )}      
       </AnimatePresence>
     </>
   );

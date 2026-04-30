@@ -21,7 +21,7 @@ async function configureSync(page: import("@playwright/test").Page, deviceName: 
 async function syncNow(page: import("@playwright/test").Page) {
   await page.goto("/sync-settings");
   await page.getByRole("button", { name: "SYNC NOW" }).click();
-  await expect(page.getByText("SYNC ACTIONS")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("Cursor")).toBeVisible({ timeout: 20_000 });
 }
 
 async function createNote(page: import("@playwright/test").Page, value: string) {
@@ -107,7 +107,7 @@ test("exports and imports a .tatacsync file across two browser contexts", async 
 
   await pageOne.goto("/manual-sync");
   const downloadPromise = pageOne.waitForEvent("download");
-  await pageOne.getByRole("button", { name: "DOWNLOAD `.tatacsync`" }).click();
+  await pageOne.getByRole("button", { name: "EXPORT `.tatacsync`" }).click();
   const download = await downloadPromise;
   const exportedFilePath = await download.path();
   if (!exportedFilePath) {

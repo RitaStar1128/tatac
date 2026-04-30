@@ -1,16 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Trash2, Edit2, Download, Copy, Search, X, RefreshCw } from "lucide-react";
-import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  type PanInfo,
+  useMotionValue,
+  useTransform,
+} from "framer-motion";
+import {
+  ArrowLeft,
+  Copy,
+  Download,
+  Edit2,
+  RefreshCw,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
+import { ExportModal } from "@/components/ExportModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ExportModal } from "@/components/ExportModal";
 import { useLanguage } from "@/contexts/LanguageContext";
+import type { StoredNoteRecord } from "@/db/tatacDb";
 import { deleteNote, listActiveNotes } from "@/domains/notes/noteRepository";
 import { deriveNoteExcerpt } from "@/domains/notes/noteText";
-import type { StoredNoteRecord } from "@/db/tatacDb";
 
 function HistoryItem({
   record,
@@ -19,6 +34,9 @@ function HistoryItem({
   onEdit,
   onCopy,
   formatDate,
+  copyLabel,
+  editLabel,
+  deleteLabel,
 }: {
   record: StoredNoteRecord;
   index: number;
@@ -26,6 +44,9 @@ function HistoryItem({
   onEdit: (id: string) => void;
   onCopy: (text: string) => void;
   formatDate: (date: string) => string;
+  copyLabel: string;
+  editLabel: string;
+  deleteLabel: string;
 }) {
   const x = useMotionValue(0);
   const deleteThreshold = -100;
@@ -118,14 +139,18 @@ function HistoryItem({
             <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
               {formatDate(record.updatedAt)}
             </div>
-            <h2 className="mt-1 truncate text-base font-black uppercase tracking-tight">{record.title}</h2>
+            <h2 className="mt-1 truncate text-base font-black uppercase tracking-tight">
+              {record.title}
+            </h2>
           </div>
 
-          <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
             <Button
               variant="ghost"
               size="icon"
               onClick={() => onCopy(record.body)}
+              aria-label={copyLabel}
+              title={copyLabel}
               className="h-8 w-8 rounded-full hover:bg-muted transition-colors"
             >
               <Copy className="w-4 h-4 text-muted-foreground" />
@@ -134,9 +159,21 @@ function HistoryItem({
               variant="ghost"
               size="icon"
               onClick={() => onEdit(record.id)}
+              aria-label={editLabel}
+              title={editLabel}
               className="h-8 w-8 rounded-full hover:bg-muted transition-colors"
             >
               <Edit2 className="w-4 h-4 text-muted-foreground" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onDelete(record.id)}
+              aria-label={deleteLabel}
+              title={deleteLabel}
+              className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive transition-colors"
+            >
+              <Trash2 className="w-4 h-4 text-muted-foreground" />
             </Button>
           </div>
         </div>
@@ -155,6 +192,36 @@ export default function HistoryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [, setLocation] = useLocation();
+  const copy =
+    language === "ja"
+      ? {
+          helper: "タップで編集。削除ボタンか左スワイプで削除できます。",
+          emptyTitle: "まだメモがありません",
+          emptyBody: "思いついたことを1つだけ書き残すところから始めてください。",
+          emptyCta: "メモを書く",
+          backAria: "ホームに戻る",
+          manualSyncAria: "手動同期を開く",
+          exportAria: "書き出しを開く",
+          copyAria: "本文をコピー",
+          editAria: "このメモを編集",
+          deleteAria: "このメモを削除",
+          searchAria: "メモを検索",
+          deleted: "メモを削除しました",
+        }
+      : {
+          helper: "Tap a note to edit it. Use the delete button or swipe left to remove it.",
+          emptyTitle: "No notes yet",
+          emptyBody: "Start with one quick thought. You can organize it later.",
+          emptyCta: "Write a note",
+          backAria: "Back to home",
+          manualSyncAria: "Open manual sync",
+          exportAria: "Open export",
+          copyAria: "Copy note body",
+          editAria: "Edit this note",
+          deleteAria: "Delete this note",
+          searchAria: "Search memos",
+          deleted: "Note deleted",
+        };
 
   const loadRecords = async () => {
     const activeRecords = await listActiveNotes();
@@ -178,7 +245,7 @@ export default function HistoryPage() {
     try {
       await deleteNote(id);
       await loadRecords();
-      toast.success(language === "ja" ? "メモを tombstone 化しました" : "Note tombstoned.", {
+      toast.success(copy.deleted, {
         className:
           "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
       });
@@ -221,6 +288,8 @@ export default function HistoryPage() {
             variant="ghost"
             size="icon"
             onClick={() => setLocation("/")}
+            aria-label={copy.backAria}
+            title={copy.backAria}
             className="mr-2 w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-all active:translate-x-[-2px]"
           >
             <ArrowLeft className="w-6 h-6" strokeWidth={2.5} />
@@ -233,6 +302,8 @@ export default function HistoryPage() {
             variant="ghost"
             size="icon"
             onClick={() => setLocation("/manual-sync")}
+            aria-label={copy.manualSyncAria}
+            title={copy.manualSyncAria}
             className="rounded-none hover:bg-muted transition-colors"
           >
             <RefreshCw className="w-5 h-5" />
@@ -243,6 +314,8 @@ export default function HistoryPage() {
               variant="ghost"
               size="icon"
               onClick={() => setIsExportOpen(true)}
+              aria-label={copy.exportAria}
+              title={copy.exportAria}
               className="rounded-none hover:bg-muted transition-colors"
             >
               <Download className="w-5 h-5" />
@@ -251,13 +324,18 @@ export default function HistoryPage() {
         </div>
       </header>
 
-      <div className="px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-[60px] z-10">
+      <div className="px-4 py-3 border-b border-border bg-muted/20 text-xs text-muted-foreground">
+        {copy.helper}
+      </div>
+
+      <div className="px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-[100px] z-10">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => setSearchQuery(event.target.value)}
             placeholder={t("searchPlaceholder")}
+            aria-label={copy.searchAria}
             className="pl-9 pr-9 h-10 rounded-none border-border focus-visible:ring-1 focus-visible:ring-foreground bg-muted/30"
           />
           {searchQuery && (
@@ -265,6 +343,8 @@ export default function HistoryPage() {
               variant="ghost"
               size="icon"
               onClick={() => setSearchQuery("")}
+              aria-label={language === "ja" ? "検索をクリア" : "Clear search"}
+              title={language === "ja" ? "検索をクリア" : "Clear search"}
               className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 hover:bg-transparent text-muted-foreground hover:text-foreground"
             >
               <X className="w-4 h-4" />
@@ -276,9 +356,24 @@ export default function HistoryPage() {
       <main className="flex-1 max-w-md mx-auto w-full p-4 overflow-x-hidden relative">
         <AnimatePresence mode="popLayout">
           {filteredRecords.length === 0 ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center h-64 text-center text-muted-foreground"
+            >
               <Search className="w-12 h-12 mb-4 opacity-20" />
-              <p className="font-bold">{searchQuery ? t("noMatchingMemos") : t("noRecords")}</p>
+              <p className="font-black text-foreground">{searchQuery ? t("noMatchingMemos") : copy.emptyTitle}</p>
+              {!searchQuery && (
+                <>
+                  <p className="mt-2 text-sm">{copy.emptyBody}</p>
+                  <Button
+                    onClick={() => setLocation("/")}
+                    className="mt-5 rounded-none border-2 border-foreground bg-foreground font-black uppercase tracking-[0.2em] text-background hover:bg-foreground/90"
+                  >
+                    {copy.emptyCta}
+                  </Button>
+                </>
+              )}
             </motion.div>
           ) : (
             filteredRecords.map((record, index) => (
@@ -294,6 +389,9 @@ export default function HistoryPage() {
                   void handleCopy(value);
                 }}
                 formatDate={formatDate}
+                copyLabel={copy.copyAria}
+                editLabel={copy.editAria}
+                deleteLabel={copy.deleteAria}
               />
             ))
           )}
