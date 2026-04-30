@@ -11,10 +11,11 @@ const salt = "c3luYy10ZXN0LXNhbHQhIQ==";
 async function configureSync(page: import("@playwright/test").Page, deviceName: string) {
   await page.goto("/sync-settings");
   await page.getByLabel("sync-user-id").fill(userId);
-  await page.getByLabel("sync-device-name").fill(deviceName);
   await page.getByLabel("sync-node-url").fill(syncNodeUrl);
-  await page.getByLabel("sync-salt").fill(salt);
   await page.getByLabel("sync-passphrase").fill(passphrase);
+  await page.getByRole("button", { name: "ADVANCED" }).click();
+  await page.getByLabel("sync-device-name").fill(deviceName);
+  await page.getByLabel("sync-salt").fill(salt);
   await page.getByRole("button", { name: "SAVE SETTINGS" }).click();
 }
 

@@ -34,12 +34,10 @@ export default function Edit() {
       ? {
           backAria: "履歴に戻る",
           saveAria: "編集内容を保存する",
-          helper: "Enter で改行。Ctrl/Cmd+Enter で保存できます。",
         }
       : {
           backAria: "Back to history",
           saveAria: "Save edited note",
-          helper: "Press Enter for a new line. Press Ctrl/Cmd+Enter to save.",
         };
 
   useEffect(() => {
@@ -200,9 +198,6 @@ export default function Edit() {
       </header>
 
       <main className="flex-1 relative flex flex-col">
-        <div className="border-b border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
-          {copy.helper}
-        </div>
         <Textarea
           ref={textareaRef}
           value={text}

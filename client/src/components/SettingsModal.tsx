@@ -2,15 +2,12 @@ import {
   Globe,
   Monitor,
   Moon,
-  RadioTower,
-  RefreshCw,
   Settings as SettingsIcon,
   Smartphone,
   Sun,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { useLocation } from "wouter";
 
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -27,21 +24,7 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
   const { t, language, setLanguage } = useLanguage();
   const { theme, setTheme } = useTheme();
   const isMobile = useIsMobile();
-  const [, setLocation] = useLocation();
-  const syncLabels =
-    language === "ja"
-      ? {
-          sync: "同期",
-          openSync: "同期設定を開く",
-          openManual: "手動同期を開く",
-          close: "設定を閉じる",
-        }
-      : {
-          sync: "SYNC",
-          openSync: "OPEN SYNC SETTINGS",
-          openManual: "OPEN MANUAL SYNC",
-          close: "Close settings",
-        };
+  const closeLabel = language === "ja" ? "設定を閉じる" : "Close settings";
 
   return (
     <AnimatePresence>
@@ -71,8 +54,8 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                aria-label={syncLabels.close}
-                title={syncLabels.close}
+                aria-label={closeLabel}
+                title={closeLabel}
                 className="rounded-none transition-colors hover:bg-destructive hover:text-destructive-foreground"
               >
                 <X className="h-6 w-6" />
@@ -166,37 +149,6 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
                   </Button>
                 </div>
               )}
-
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-muted-foreground">
-                  <RadioTower className="h-3 w-3" />
-                  {syncLabels.sync}
-                </label>
-                <div className="grid gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      onClose();
-                      setLocation("/sync-settings");
-                    }}
-                    className="w-full justify-start rounded-none border-2 border-foreground font-bold hover:bg-accent"
-                  >
-                    <RadioTower className="mr-2 h-4 w-4" />
-                    {syncLabels.openSync}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      onClose();
-                      setLocation("/manual-sync");
-                    }}
-                    className="w-full justify-start rounded-none border-2 border-foreground font-bold hover:bg-accent"
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    {syncLabels.openManual}
-                  </Button>
-                </div>
-              </div>
             </div>
           </motion.div>
         </motion.div>
