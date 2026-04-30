@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { toast } from "sonner";
+import type { NoteRecord } from "@shared/contracts";
 
 // UX_RATIONALE:
 // - feedback_loop: コピー完了時にアイコンを変化させ、成功を視覚的にフィードバック。
@@ -13,7 +14,7 @@ import { toast } from "sonner";
 interface ExportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  records: any[];
+  records: NoteRecord[];
 }
 
 export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
@@ -36,8 +37,8 @@ export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
       content = JSON.stringify(records, null, 2);
     } else {
       content = records.map(r => {
-        const date = new Date(r.date).toLocaleString();
-        return `## ${date}\n${r.text}\n`;
+        const date = new Date(r.updatedAt).toLocaleString();
+        return `## ${r.title}\n${date}\n\n${r.body}\n`;
       }).join('\n---\n\n');
     }
 
@@ -68,8 +69,8 @@ export function ExportModal({ isOpen, onClose, records }: ExportModalProps) {
       extension = 'json';
     } else {
       content = records.map(r => {
-        const date = new Date(r.date).toLocaleString();
-        return `## ${date}\n${r.text}\n`;
+        const date = new Date(r.updatedAt).toLocaleString();
+        return `## ${r.title}\n${date}\n\n${r.body}\n`;
       }).join('\n---\n\n');
       mimeType = 'text/markdown';
       extension = 'md';

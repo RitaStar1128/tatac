@@ -1,19 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { ArrowLeft, Save } from "lucide-react";
+import { motion } from "framer-motion";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useIsMobile } from "@/hooks/useMobile";
-import { getStoredRecords, setStoredRecords, type MemoRecord } from "@/lib/recordsStorage";
-import { toast } from "sonner";
-import { motion } from "framer-motion";
-
-// UX_RATIONALE:
-// - mode_awareness: ヘッダーの色を反転（黒背景）させることで、編集モードであることを明確に伝える。
-// - consistency: メイン画面と同様の入力体験を提供しつつ、保存アクションを明確にする。
-// - feedback: 保存完了時にトーストと振動でフィードバックを行い、操作の完了を伝える。
-// - mobile_optimization: モバイル版では保存ボタンを固定配置（fixed）にし、interactive-widget=resizes-contentによりキーボードの上に自然に配置させる。
+import { getNoteById, updateNote } from "@/domains/notes/noteRepository";
+import type { StoredNoteRecord } from "@/db/tatacDb";
 
 export default function Edit() {
   const [, params] = useRoute("/edit/:id");
@@ -21,46 +17,50 @@ export default function Edit() {
   const { t } = useLanguage();
   const isMobile = useIsMobile();
   const [text, setText] = useState("");
-  const [originalRecord, setOriginalRecord] = useState<MemoRecord | null>(null);
+  const [originalRecord, setOriginalRecord] = useState<StoredNoteRecord | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pendingEnterRef = useRef(false);
   const mobileSaveButtonClearance = "calc(10rem + env(safe-area-inset-bottom))";
   const normalizedText = text.trim();
-  const normalizedOriginalText = originalRecord?.text.trim() ?? "";
+  const normalizedOriginalText = originalRecord?.body.trim() ?? "";
   const canSave =
     !!originalRecord &&
     normalizedText.length > 0 &&
-    normalizedText !== normalizedOriginalText;
+    normalizedText !== normalizedOriginalText &&
+    !isSaving;
 
   useEffect(() => {
+    let cancelled = false;
+
     if (params?.id) {
-      const storedRecords = getStoredRecords();
-      const record = storedRecords.find((r) => r.id === params.id);
-      if (record) {
-        setOriginalRecord(record);
-        setText(record.text);
-      } else {
-        setLocation("/history");
-      }
+      void getNoteById(params.id).then((record) => {
+        if (cancelled) return;
+        if (record && record.deletedAt === null) {
+          setOriginalRecord(record);
+          setText(record.body);
+        } else {
+          setLocation("/history");
+        }
+      });
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [params?.id, setLocation]);
 
-  // Auto-focus on mount
   useEffect(() => {
-    if (textareaRef.current) {
-      // Small delay to ensure render
-      setTimeout(() => {
-        textareaRef.current?.focus();
-        // Move cursor to end
-        textareaRef.current?.setSelectionRange(
-          textareaRef.current.value.length,
-          textareaRef.current.value.length
-        );
-      }, 100);
-    }
+    if (!originalRecord) return;
+    const timer = window.setTimeout(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.setSelectionRange(textareaRef.current.value.length, textareaRef.current.value.length);
+    }, 100);
+
+    return () => window.clearTimeout(timer);
   }, [originalRecord]);
 
-  const saveEdit = ({
+  const saveEdit = async ({
     silent = false,
     navigate = true,
   }: {
@@ -69,59 +69,47 @@ export default function Edit() {
   } = {}) => {
     if (!canSave || !originalRecord) return false;
 
-    const storedRecords = getStoredRecords();
-    const updatedRecords = storedRecords.map((r) => {
-      if (r.id === originalRecord.id) {
-        return {
-          ...r,
-          text: normalizedText,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      return r;
-    });
+    setIsSaving(true);
+    try {
+      const updated = await updateNote(originalRecord.id, normalizedText);
+      setOriginalRecord(updated);
 
-    const saved = setStoredRecords(updatedRecords);
-    if (!saved) {
+      if (!silent) {
+        toast.success(t("saved"), {
+          duration: 1500,
+          className:
+            "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
+        });
+        navigator.vibrate?.(50);
+      }
+
+      if (navigate) {
+        setLocation("/history");
+      }
+
+      return true;
+    } catch {
       if (!silent) {
         toast.error(t("errorUnexpected"), {
-          className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+          className:
+            "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
         });
       }
       return false;
+    } finally {
+      setIsSaving(false);
     }
-    
-    if (!silent) {
-      toast.success(t("saved"), {
-        duration: 1500,
-        className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
-      });
-
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }
-
-    if (navigate) {
-      setLocation("/history");
-    }
-
-    return true;
-  };
-
-  const handleSave = () => {
-    saveEdit();
   };
 
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        saveEdit({ silent: true, navigate: false });
+        void saveEdit({ silent: true, navigate: false });
       }
     };
 
     const handleBeforeUnload = () => {
-      saveEdit({ silent: true, navigate: false });
+      void saveEdit({ silent: true, navigate: false });
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -146,7 +134,7 @@ export default function Edit() {
       if (pendingEnterRef.current) return;
 
       pendingEnterRef.current = true;
-      handleSave();
+      void saveEdit();
       setTimeout(() => {
         pendingEnterRef.current = false;
       }, 500);
@@ -155,15 +143,14 @@ export default function Edit() {
 
   return (
     <div className="h-[100dvh] flex flex-col bg-background text-foreground overflow-hidden">
-      {/* Header - Inverted colors for Edit Mode */}
       <header className="flex items-center justify-between px-4 py-3 border-b-2 border-foreground shrink-0 z-10 bg-foreground text-background transition-colors duration-300">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => {
+            onClick={async () => {
               if (canSave) {
-                const saved = saveEdit();
+                const saved = await saveEdit();
                 if (!saved) return;
                 return;
               }
@@ -173,16 +160,21 @@ export default function Edit() {
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="font-black text-lg tracking-tight uppercase">
-            {t("editMode")}
-          </h1>
+          <div>
+            <h1 className="font-black text-lg tracking-tight uppercase">{t("editMode")}</h1>
+            {originalRecord && (
+              <p className="text-xs uppercase tracking-[0.25em] text-background/70">{originalRecord.title}</p>
+            )}
+          </div>
         </div>
-        
+
         {!isMobile && (
           <Button
             variant="ghost"
             size="icon"
-            onClick={handleSave}
+            onClick={() => {
+              void saveEdit();
+            }}
             disabled={!canSave}
             className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -191,7 +183,6 @@ export default function Edit() {
         )}
       </header>
 
-      {/* Main Input Area */}
       <main className="flex-1 relative flex flex-col">
         <Textarea
           ref={textareaRef}
@@ -209,8 +200,7 @@ export default function Edit() {
           }
           spellCheck={false}
         />
-        
-        {/* Mobile Save Button (Fixed Position relying on interactive-widget=resizes-content) */}
+
         {isMobile && canSave && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
@@ -218,7 +208,9 @@ export default function Edit() {
             className="fixed right-4 bottom-[calc(env(safe-area-inset-bottom)+1rem)] z-50"
           >
             <Button
-              onClick={handleSave}
+              onClick={() => {
+                void saveEdit();
+              }}
               size="lg"
               className="rounded-full w-14 h-14 shadow-xl border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold flex items-center justify-center"
             >

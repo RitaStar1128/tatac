@@ -44,3 +44,10 @@ export const setStoredRecords = (records: MemoRecord[]): boolean => {
   }
 };
 
+export const clearStoredRecords = (): void => {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Ignore storage cleanup errors during migration.
+  }
+};

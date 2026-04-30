@@ -1,9 +1,10 @@
-import { X, Monitor, Moon, Sun, Globe, Smartphone, Settings as SettingsIcon } from "lucide-react";
+import { X, Monitor, Moon, Sun, Globe, Smartphone, Settings as SettingsIcon, RefreshCw, RadioTower } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useMobile";
+import { useLocation } from "wouter";
 
 // UX_RATIONALE:
 // - modal_design: DescriptionModalと統一されたデザイン。
@@ -19,6 +20,7 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
   const { t, language, setLanguage } = useLanguage();
   const { theme, setTheme } = useTheme();
   const isMobile = useIsMobile();
+  const [, setLocation] = useLocation();
 
   return (
     <AnimatePresence>
@@ -143,6 +145,37 @@ export function SettingsModal({ isOpen, onClose, onOpenMobileQr }: SettingsModal
                   </Button>
                 </div>
               )}
+
+              <div className="space-y-3">
+                <label className="text-xs font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                  <RadioTower className="w-3 h-3" />
+                  {language === "ja" ? "同期" : "SYNC"}
+                </label>
+                <div className="grid gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      onClose();
+                      setLocation("/sync-settings");
+                    }}
+                    className="w-full border-2 border-foreground hover:bg-accent font-bold rounded-none justify-start"
+                  >
+                    <RadioTower className="mr-2 h-4 w-4" />
+                    {language === "ja" ? "同期設定を開く" : "OPEN SYNC SETTINGS"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      onClose();
+                      setLocation("/manual-sync");
+                    }}
+                    className="w-full border-2 border-foreground hover:bg-accent font-bold rounded-none justify-start"
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    {language === "ja" ? "手動同期UIを開く" : "OPEN MANUAL SYNC"}
+                  </Button>
+                </div>
+              </div>
             </div>
           </motion.div>
         </motion.div>

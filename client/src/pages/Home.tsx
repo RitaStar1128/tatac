@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { History, Settings, Smartphone, HelpCircle, Save } from "lucide-react";
+import { History, Settings, Smartphone, HelpCircle, Save, DatabaseZap } from "lucide-react";
 import { motion } from "framer-motion";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsModal } from "@/components/SettingsModal";
@@ -9,43 +11,44 @@ import { DescriptionModal } from "@/components/DescriptionModal";
 import { PWAInstallPrompt, PWAInstallPromptHandle } from "@/components/PWAInstallPrompt";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useIsMobile } from "@/hooks/useMobile";
-import { getStoredRecords, setStoredRecords, type MemoRecord } from "@/lib/recordsStorage";
-import { toast } from "sonner";
-
-// UX_RATIONALE:
-// - distraction_free_mode: 入力時はヘッダー以外の要素を極力排除し、書くことに集中させる。
-// - auto_save: ユーザーが保存操作を意識せずとも、思考を途切れさせないように自動保存（Enter/閉じる）を行う。
-// - haptic_feedback: 保存完了時に微細な振動を与えることで、完了した感覚を身体的にフィードバックする（モバイル）。
-// - mobile_optimization: モバイル版では保存ボタンを固定配置（fixed）にし、interactive-widget=resizes-contentによりキーボードの上に自然に配置させる。
+import { createNote, getNotesSnapshot } from "@/domains/notes/noteRepository";
 
 export default function Home() {
   const [text, setText] = useState("");
+  const [noteCount, setNoteCount] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDescriptionOpen, setIsDescriptionOpen] = useState(false);
   const [, setLocation] = useLocation();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const isMobile = useIsMobile();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const pwaPromptRef = useRef<PWAInstallPromptHandle>(null);
   const pendingEnterRef = useRef(false);
   const textRef = useRef(text);
+  const savingRef = useRef(false);
   const [isPWA, setIsPWA] = useState(false);
   const showMobileSaveButton = isMobile && text.trim().length > 0;
   const mobileSaveButtonClearance = "calc(10rem + env(safe-area-inset-bottom))";
-  
-  useEffect(() => {
-    // Check if running as PWA
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
-                         (window.navigator as any).standalone || 
-                         document.referrer.includes('android-app://');
-    setIsPWA(isStandalone);
 
-    // Auto-focus on mount
+  const refreshCounts = async () => {
+    const snapshot = await getNotesSnapshot();
+    setNoteCount(snapshot.activeNotes.length);
+  };
+
+  useEffect(() => {
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone ||
+      document.referrer.includes("android-app://");
+    setIsPWA(Boolean(isStandalone));
+
+    void refreshCounts();
+
     if (textareaRef.current) {
       textareaRef.current.focus();
     }
 
-    // Show description on first visit
     const hasVisited = localStorage.getItem("tatac_visited");
     if (!hasVisited) {
       setIsDescriptionOpen(true);
@@ -57,61 +60,50 @@ export default function Home() {
     textRef.current = text;
   }, [text]);
 
-  const saveMemo = ({ silent = false }: { silent?: boolean } = {}) => {
-    const trimmedText = text.trim();
-    if (!trimmedText) return false;
+  const saveMemo = async ({ silent = false }: { silent?: boolean } = {}) => {
+    const trimmedText = textRef.current.trim();
+    if (!trimmedText || savingRef.current) return false;
 
-    const newRecord: MemoRecord = {
-      id: crypto.randomUUID(),
-      text: trimmedText,
-      date: new Date().toISOString(),
-    };
+    savingRef.current = true;
+    setIsSaving(true);
 
-    const existingRecords = getStoredRecords();
-    const saved = setStoredRecords([newRecord, ...existingRecords]);
-    if (!saved) {
+    try {
+      await createNote(trimmedText);
+      textRef.current = "";
+      setText("");
+      await refreshCounts();
+
+      if (!silent) {
+        toast.success(t("saved"), {
+          duration: 1500,
+          position: "bottom-center",
+          className:
+            "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
+        });
+      }
+
+      if (!silent && navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+
+      return true;
+    } catch {
       if (!silent) {
         toast.error(t("errorUnexpected"), {
-          className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+          className:
+            "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
         });
       }
       return false;
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
     }
-
-    textRef.current = "";
-    setText("");
-    if (!silent) {
-      toast.success(t("saved"), {
-        duration: 1500,
-        position: "bottom-center",
-        className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
-      });
-    }
-    
-    // Haptic feedback if available
-    if (!silent && navigator.vibrate) {
-      navigator.vibrate(50);
-    }
-
-    return true;
   };
 
   useEffect(() => {
     const flushMemoSilently = () => {
-      const trimmedText = textRef.current.trim();
-      if (!trimmedText) return;
-
-      const newRecord: MemoRecord = {
-        id: crypto.randomUUID(),
-        text: trimmedText,
-        date: new Date().toISOString(),
-      };
-      const existingRecords = getStoredRecords();
-      const saved = setStoredRecords([newRecord, ...existingRecords]);
-      if (saved) {
-        textRef.current = "";
-        setText("");
-      }
+      void saveMemo({ silent: true });
     };
 
     const handleVisibilityChange = () => {
@@ -134,10 +126,7 @@ export default function Home() {
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (isMobile) {
-      // Mobile: Enter for new line (default behavior)
-      return;
-    }
+    if (isMobile) return;
 
     const isModifierPressed = e.ctrlKey || e.metaKey;
     const isSaveShortcut =
@@ -146,14 +135,11 @@ export default function Home() {
 
     if (isSaveShortcut) {
       e.preventDefault();
-
-      // Prevent accidental double saves or rapid firing
       if (pendingEnterRef.current) return;
 
       if (text.trim()) {
         pendingEnterRef.current = true;
-        saveMemo();
-        // Reset pending flag after a short delay
+        void saveMemo();
         setTimeout(() => {
           pendingEnterRef.current = false;
         }, 500);
@@ -161,23 +147,22 @@ export default function Home() {
     }
   };
 
-  // Mobile save button handler
   const handleMobileSave = () => {
     if (text.trim()) {
-      saveMemo();
-      // Keep focus for continuous writing
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-      }
+      void saveMemo();
+      textareaRef.current?.focus();
     }
   };
 
+  const localFirstHint =
+    language === "ja"
+      ? "先頭行がタイトルになり、本文全体は IndexedDB と oplog に保存されます。"
+      : "The first line becomes the title. The full note is persisted to IndexedDB and the local oplog.";
+
   return (
     <div className="h-[100dvh] flex flex-col bg-background text-foreground overflow-hidden">
-      {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b-2 border-foreground shrink-0 z-10 bg-background">
         <div className="flex items-center gap-3">
-          {/* H1 for SEO, styled as logo */}
           <h1 className="flex items-center gap-2 font-black text-lg tracking-tight uppercase select-none cursor-default">
             <img
               src="/images/icon-tatac-generated.png"
@@ -195,9 +180,13 @@ export default function Home() {
             <HelpCircle className="w-5 h-5" />
           </Button>
         </div>
-        
-        <div className="flex items-center gap-1">
-          {/* PWA Install Button - Only show on mobile browser (not PWA, not PC) */}
+
+        <div className="flex items-center gap-2">
+          <div className="hidden sm:flex items-center gap-2 border border-border px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.25em]">
+            <DatabaseZap className="h-3.5 w-3.5" />
+            {noteCount}
+          </div>
+
           {isMobile && !isPWA && (
             <Button
               variant="ghost"
@@ -221,9 +210,9 @@ export default function Home() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => {
+            onClick={async () => {
               if (text.trim()) {
-                const saved = saveMemo();
+                const saved = await saveMemo();
                 if (!saved) return;
               }
               setLocation("/history");
@@ -232,15 +221,14 @@ export default function Home() {
           >
             <History className="w-5 h-5" />
           </Button>
-          
         </div>
       </header>
 
-      {/* Main Input Area */}
       <main className="flex-1 relative flex flex-col">
-        {/* Hidden H2 for SEO structure */}
-        <h2 className="sr-only">New Memo Input</h2>
-        
+        <div className="border-b border-border bg-muted/20 px-6 py-3 text-xs text-muted-foreground">
+          {localFirstHint}
+        </div>
+
         <Textarea
           ref={textareaRef}
           value={text}
@@ -258,8 +246,7 @@ export default function Home() {
           }
           spellCheck={false}
         />
-        
-        {/* Mobile Save Button (Fixed Position relying on interactive-widget=resizes-content) */}
+
         {showMobileSaveButton && (
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
@@ -270,6 +257,7 @@ export default function Home() {
             <Button
               onClick={handleMobileSave}
               size="lg"
+              disabled={isSaving}
               className="rounded-full w-14 h-14 shadow-xl border-2 border-foreground bg-foreground text-background hover:bg-foreground/90 font-bold flex items-center justify-center"
             >
               <Save className="w-6 h-6" />
@@ -278,21 +266,17 @@ export default function Home() {
         )}
       </main>
 
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
+      <SettingsModal
+        isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onOpenMobileQr={() => {
           setIsSettingsOpen(false);
-          // Small delay to allow modal to close first
           setTimeout(() => pwaPromptRef.current?.open(), 100);
         }}
       />
-      
-      <DescriptionModal 
-        isOpen={isDescriptionOpen} 
-        onClose={() => setIsDescriptionOpen(false)} 
-      />
-      
+
+      <DescriptionModal isOpen={isDescriptionOpen} onClose={() => setIsDescriptionOpen(false)} />
+
       <PWAInstallPrompt ref={pwaPromptRef} />
     </div>
   );

@@ -1,152 +1,131 @@
-import { useState, useEffect, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Trash2, Edit2, Download, Copy, Search, X, RefreshCw } from "lucide-react";
+import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from "framer-motion";
 import { useLocation } from "wouter";
-import { ArrowLeft, Trash2, Edit2, ShoppingBag, Download, Copy, Search, X } from "lucide-react";
-import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from "framer-motion";
-import { useLanguage } from "@/contexts/LanguageContext";
-import { ExportModal } from "@/components/ExportModal";
-import { getStoredRecords, setStoredRecords, type MemoRecord } from "@/lib/recordsStorage";
 import { toast } from "sonner";
 
-// UX_RATIONALE:
-// - readability: メモの内容を省略せずに全て表示することで、詳細を確認するためにタップする手間を省く。
-// - efficiency: コピーボタンを各項目に配置し、ワンタップでクリップボードにコピーできるようにする。
-// - spring_physics: スワイプ操作にバネのような物理挙動を導入し、指への追従性と心地よい反発感を実現。
-// - dynamic_feedback: スワイプ量に応じてゴミ箱アイコンのスケールや色を変化させ、削除の閾値を直感的に伝える。
-// - search_accessibility: 履歴が増えた際の検索性を高めるため、ヘッダー直下に検索バーを配置。
-// - instant_feedback: 入力と同時にフィルタリングを行い、即座に結果を表示する。
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ExportModal } from "@/components/ExportModal";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { deleteNote, listActiveNotes } from "@/domains/notes/noteRepository";
+import { deriveNoteExcerpt } from "@/domains/notes/noteText";
+import type { StoredNoteRecord } from "@/db/tatacDb";
 
-type Record = MemoRecord;
-
-// Swipeable Item Component with Advanced Physics
-function HistoryItem({ 
-  record, 
-  index, 
-  onDelete, 
+function HistoryItem({
+  record,
+  index,
+  onDelete,
   onEdit,
   onCopy,
-  formatDate 
-}: { 
-  record: Record; 
-  index: number; 
-  onDelete: (id: string) => void; 
+  formatDate,
+}: {
+  record: StoredNoteRecord;
+  index: number;
+  onDelete: (id: string) => void;
   onEdit: (id: string) => void;
   onCopy: (text: string) => void;
   formatDate: (date: string) => string;
 }) {
-  const { t } = useLanguage();
-  // Motion values for swipe gesture
   const x = useMotionValue(0);
-  
-  // Dynamic transformations based on swipe distance
   const deleteThreshold = -100;
   const bgOpacity = useTransform(x, [0, -50, -100], [0, 0.5, 1]);
   const iconScale = useTransform(x, [-50, -100, -150], [0.8, 1.2, 1.5]);
-  const iconColor = useTransform(x, [-80, -100], ["#ffffff", "#ff0000"]); // White to Red
-  
-  // Track if threshold was crossed to trigger haptic once
   const [crossedThreshold, setCrossedThreshold] = useState(false);
-  const suppressClickRef = useRef(false);
+  const [suppressClick, setSuppressClick] = useState(false);
 
   useEffect(() => {
     const unsubscribe = x.on("change", (latest) => {
       if (latest < deleteThreshold && !crossedThreshold) {
         setCrossedThreshold(true);
-        if (navigator.vibrate) navigator.vibrate(15); // Light tick
+        navigator.vibrate?.(15);
       } else if (latest >= deleteThreshold && crossedThreshold) {
         setCrossedThreshold(false);
       }
     });
-    return () => unsubscribe();
-  }, [x, crossedThreshold]);
 
-  const handleDrag = (_: any, info: PanInfo) => {
+    return () => unsubscribe();
+  }, [crossedThreshold, x]);
+
+  const handleDrag = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     if (Math.abs(info.offset.x) > 5) {
-      suppressClickRef.current = true;
+      setSuppressClick(true);
     }
   };
 
-  const handleDragEnd = (_: any, info: PanInfo) => {
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     const didDrag = Math.abs(info.offset.x) > 5;
     if (info.offset.x < deleteThreshold || info.velocity.x < -500) {
-      // Trigger delete with velocity or distance
       onDelete(record.id);
-    } else {
-      // Reset is handled by dragConstraints
     }
+
     if (didDrag) {
-      suppressClickRef.current = true;
-      window.setTimeout(() => {
-        suppressClickRef.current = false;
-      }, 0);
+      window.setTimeout(() => setSuppressClick(false), 0);
     } else {
-      suppressClickRef.current = false;
+      setSuppressClick(false);
     }
   };
 
   return (
     <motion.div
-      layout // Enable layout animation for smooth list reordering
+      layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ 
-        opacity: 0, 
-        height: 0, 
-        marginBottom: 0, 
-        x: -300, 
-        transition: { 
+      exit={{
+        opacity: 0,
+        height: 0,
+        marginBottom: 0,
+        x: -300,
+        transition: {
           opacity: { duration: 0.2 },
           x: { duration: 0.2 },
           height: { duration: 0.3, delay: 0.1 },
-          marginBottom: { duration: 0.3, delay: 0.1 }
-        } 
+          marginBottom: { duration: 0.3, delay: 0.1 },
+        },
       }}
-      transition={{ delay: index * 0.05 }}
+      transition={{ delay: index * 0.04 }}
       className="relative mb-3"
     >
-      {/* Background Layer (Delete Action) */}
-      <motion.div 
+      <motion.div
         style={{ opacity: bgOpacity }}
         className="absolute inset-0 bg-destructive flex items-center justify-end px-6 rounded-none"
       >
-        <motion.div style={{ scale: iconScale, color: iconColor }}>
+        <motion.div style={{ scale: iconScale }}>
           <Trash2 className="w-6 h-6 text-destructive-foreground" strokeWidth={2.5} />
         </motion.div>
       </motion.div>
 
-      {/* Foreground Layer (Content) */}
       <motion.div
+        data-testid={`history-note-${record.id}`}
+        data-note-title={record.title}
         style={{ x }}
         drag="x"
         dragConstraints={{ left: 0, right: 0 }}
-        dragElastic={{ left: 0.5, right: 0.05 }} // Stiffer right resistance
+        dragElastic={{ left: 0.5, right: 0.05 }}
         onDrag={handleDrag}
         onDragEnd={handleDragEnd}
         whileDrag={{ scale: 1.02, cursor: "grabbing" }}
         whileTap={{ scale: 0.98 }}
         onClick={() => {
-          if (suppressClickRef.current) return;
-          onEdit(record.id);
+          if (!suppressClick) {
+            onEdit(record.id);
+          }
         }}
         className="relative border-2 border-border bg-card p-4 flex flex-col gap-3 touch-pan-y cursor-pointer select-none"
       >
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            {formatDate(record.date)}
-            {record.updatedAt && (
-              <span className="ml-2 opacity-70">
-                ({t("edited")})
-              </span>
-            )}
-          </span>
-          
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+              {formatDate(record.updatedAt)}
+            </div>
+            <h2 className="mt-1 truncate text-base font-black uppercase tracking-tight">{record.title}</h2>
+          </div>
+
+          <div className="flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => onCopy(record.text)}
+              onClick={() => onCopy(record.body)}
               className="h-8 w-8 rounded-full hover:bg-muted transition-colors"
             >
               <Copy className="w-4 h-4 text-muted-foreground" />
@@ -162,167 +141,85 @@ function HistoryItem({
           </div>
         </div>
 
-        <div className="flex flex-col">
-          <span className="text-base font-medium leading-relaxed whitespace-pre-wrap break-words">
-            {record.text}
-          </span>
-        </div>
+        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words text-muted-foreground">
+          {deriveNoteExcerpt(record.body)}
+        </p>
       </motion.div>
     </motion.div>
   );
 }
 
 export default function HistoryPage() {
-  const { t, formatDate } = useLanguage();
-  const [records, setRecords] = useState<Record[]>([]);
-  const [filteredRecords, setFilteredRecords] = useState<Record[]>([]);
+  const { t, formatDate, language } = useLanguage();
+  const [records, setRecords] = useState<StoredNoteRecord[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showTutorial, setShowTutorial] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
-  const pendingDeleteRef = useRef<{ record: Record; index: number } | null>(null);
-  const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const recordsRef = useRef<Record[]>([]);
-  const [_, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
 
-  const clearUndoTimeout = () => {
-    if (undoTimeoutRef.current) {
-      clearTimeout(undoTimeoutRef.current);
-      undoTimeoutRef.current = null;
-    }
-  };
-
-  const handleUndoDelete = () => {
-    const pendingDelete = pendingDeleteRef.current;
-    if (!pendingDelete) return;
-
-    const restoredRecords = [...recordsRef.current];
-    const restoreIndex = Math.min(pendingDelete.index, restoredRecords.length);
-    restoredRecords.splice(restoreIndex, 0, pendingDelete.record);
-
-    const saved = setStoredRecords(restoredRecords);
-    if (!saved) {
-      toast.error(t("errorUnexpected"), {
-        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
-      });
-      return;
-    }
-
-    setRecords(restoredRecords);
-    recordsRef.current = restoredRecords;
-    pendingDeleteRef.current = null;
-    clearUndoTimeout();
+  const loadRecords = async () => {
+    const activeRecords = await listActiveNotes();
+    setRecords(activeRecords);
   };
 
   useEffect(() => {
-    // Sort by date desc
-    const parsed = getStoredRecords().sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
-    setRecords(parsed);
-    setFilteredRecords(parsed);
-    recordsRef.current = parsed;
-
-    // Check tutorial status
-    const hasSeenTutorial = localStorage.getItem("tatac_swipe_tutorial_seen");
-    if (!hasSeenTutorial && parsed.length > 0) {
-      setShowTutorial(true);
-      // Auto dismiss after 3 seconds
-      setTimeout(() => {
-        setShowTutorial(false);
-        localStorage.setItem("tatac_swipe_tutorial_seen", "true");
-      }, 3000);
-    }
-
-    return () => {
-      clearUndoTimeout();
-    };
+    void loadRecords();
   }, []);
 
-  useEffect(() => {
-    recordsRef.current = records;
-    if (!searchQuery.trim()) {
-      setFilteredRecords(records);
-      return;
-    }
-    
+  const filteredRecords = useMemo(() => {
+    if (!searchQuery.trim()) return records;
     const query = searchQuery.toLowerCase();
-    const filtered = records.filter(record => 
-      record.text.toLowerCase().includes(query)
+    return records.filter(
+      (record) =>
+        record.title.toLowerCase().includes(query) || record.body.toLowerCase().includes(query),
     );
-    setFilteredRecords(filtered);
-  }, [searchQuery, records]);
+  }, [records, searchQuery]);
 
-  const handleDelete = (id: string) => {
-    const deleteIndex = records.findIndex((r) => r.id === id);
-    if (deleteIndex === -1) return;
-    const deletedRecord = records[deleteIndex];
-
-    const newRecords = records.filter((r) => r.id !== id);
-    const saved = setStoredRecords(newRecords);
-    if (!saved) {
-      toast.error(t("errorUnexpected"), {
-        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteNote(id);
+      await loadRecords();
+      toast.success(language === "ja" ? "メモを tombstone 化しました" : "Note tombstoned.", {
+        className:
+          "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
       });
-      return;
-    }
-
-    setRecords(newRecords);
-    recordsRef.current = newRecords;
-    pendingDeleteRef.current = { record: deletedRecord, index: deleteIndex };
-    clearUndoTimeout();
-    undoTimeoutRef.current = setTimeout(() => {
-      pendingDeleteRef.current = null;
-      undoTimeoutRef.current = null;
-    }, 5000);
-
-    toast(t("delete"), {
-      duration: 5000,
-      action: {
-        label: t("undo"),
-        onClick: handleUndoDelete,
-      },
-      className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
-    });
-
-    // Stronger haptic feedback on delete
-    if (navigator.vibrate) {
-      navigator.vibrate([50, 30, 50]);
+      navigator.vibrate?.([50, 30, 50]);
+    } catch {
+      toast.error(t("errorUnexpected"), {
+        className:
+          "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+      });
     }
   };
 
-  const handleEdit = (id: string) => {
-    setLocation(`/edit/${id}`);
-  };
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
       toast.success(t("copied"), {
         duration: 1500,
-        className: "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
+        className:
+          "font-bold uppercase tracking-widest border-2 border-foreground bg-background text-foreground rounded-none shadow-none",
       });
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-    }).catch(() => {
+      navigator.vibrate?.(50);
+    } catch {
       toast.error(t("copyFailed"), {
-        className: "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
+        className:
+          "font-bold uppercase tracking-widest border-2 border-destructive bg-background text-destructive rounded-none shadow-none",
       });
-    });
+    }
   };
 
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
       className="min-h-screen flex flex-col bg-background text-foreground font-sans"
     >
-      {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b-2 border-border bg-background sticky top-0 z-10">
         <div className="flex items-center">
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setLocation("/")}
             className="mr-2 w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-all active:translate-x-[-2px]"
           >
@@ -330,20 +227,30 @@ export default function HistoryPage() {
           </Button>
           <h1 className="text-lg font-black tracking-tighter uppercase">{t("history")}</h1>
         </div>
-        
-        {records.length > 0 && (
+
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsExportOpen(true)}
+            onClick={() => setLocation("/manual-sync")}
             className="rounded-none hover:bg-muted transition-colors"
           >
-            <Download className="w-5 h-5" />
+            <RefreshCw className="w-5 h-5" />
           </Button>
-        )}
+
+          {records.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsExportOpen(true)}
+              className="rounded-none hover:bg-muted transition-colors"
+            >
+              <Download className="w-5 h-5" />
+            </Button>
+          )}
+        </div>
       </header>
 
-      {/* Search Bar */}
       <div className="px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-[60px] z-10">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -367,49 +274,25 @@ export default function HistoryPage() {
       </div>
 
       <main className="flex-1 max-w-md mx-auto w-full p-4 overflow-x-hidden relative">
-        {/* Tutorial Overlay */}
-        <AnimatePresence>
-          {showTutorial && records.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 z-20 pointer-events-none flex items-start justify-center pt-12"
-            >
-              <div className="bg-foreground/90 text-background px-4 py-2 rounded-full font-bold text-sm flex items-center gap-2 shadow-lg">
-                <motion.div
-                  animate={{ x: [-5, 5, -5] }}
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
-                >
-                  ←
-                </motion.div>
-                {t("swipeToDelete")}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
         <AnimatePresence mode="popLayout">
           {filteredRecords.length === 0 ? (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex flex-col items-center justify-center h-64 text-muted-foreground"
-            >
-              <ShoppingBag className="w-12 h-12 mb-4 opacity-20" />
-              <p className="font-bold">
-                {searchQuery ? t("noMatchingMemos") : t("noRecords")}
-              </p>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+              <Search className="w-12 h-12 mb-4 opacity-20" />
+              <p className="font-bold">{searchQuery ? t("noMatchingMemos") : t("noRecords")}</p>
             </motion.div>
           ) : (
             filteredRecords.map((record, index) => (
-              <HistoryItem 
-                key={record.id} 
-                record={record} 
-                index={index} 
-                onDelete={handleDelete}
-                onEdit={handleEdit}
-                onCopy={handleCopy}
+              <HistoryItem
+                key={record.id}
+                record={record}
+                index={index}
+                onDelete={(noteId) => {
+                  void handleDelete(noteId);
+                }}
+                onEdit={(noteId) => setLocation(`/edit/${noteId}`)}
+                onCopy={(value) => {
+                  void handleCopy(value);
+                }}
                 formatDate={formatDate}
               />
             ))
@@ -417,11 +300,7 @@ export default function HistoryPage() {
         </AnimatePresence>
       </main>
 
-      <ExportModal 
-        isOpen={isExportOpen} 
-        onClose={() => setIsExportOpen(false)} 
-        records={records} 
-      />
+      <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} records={records} />
     </motion.div>
   );
 }
