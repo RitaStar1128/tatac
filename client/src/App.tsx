@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ReloadPrompt } from "@/components/ReloadPrompt";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAppBootstrap } from "@/app/useAppBootstrap";
+import { useRealtimeSync } from "@/app/useRealtimeSync";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -50,6 +51,7 @@ function BootScreen({ error }: { error: Error | null }) {
 
 function App() {
   const bootstrap = useAppBootstrap();
+  useRealtimeSync(bootstrap.ready);
   // Set document title for SEO (30-60 characters)
   if (typeof document !== 'undefined') {
     document.title = "TATAC - Reflex Input Memo App for Instant Thought Capture";

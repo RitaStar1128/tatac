@@ -69,6 +69,7 @@ function useLabels(language: "ja" | "en") {
             importFailed: "手動同期ファイルの適用に失敗しました。",
             currentState: "この端末の状態",
             activeUser: "User ID",
+            keyEpoch: "Key Epoch",
             device: "Device ID",
             salt: "Group Salt",
             rulesTitle: "一致条件",
@@ -85,6 +86,7 @@ function useLabels(language: "ja" | "en") {
             groupMismatch: "別の同期グループのファイルです。同じ userId と salt の端末だけで使ってください。",
             decryptMismatch: "復号できませんでした。同じ passphrase を入力しているか確認してください。",
             importPreviewUser: "User",
+            importPreviewEpoch: "Epoch",
             importPreviewDevice: "From Device",
             importPreviewItems: "Items",
             importPreviewExported: "Exported",
@@ -134,6 +136,7 @@ function useLabels(language: "ja" | "en") {
             groupMismatch: "This file belongs to a different sync group. Use matching userId and salt.",
             decryptMismatch: "Unable to decrypt this file. Check that the same passphrase is entered here.",
             importPreviewUser: "User",
+            importPreviewEpoch: "Epoch",
             importPreviewDevice: "From Device",
             importPreviewItems: "Items",
             importPreviewExported: "Exported",
@@ -164,6 +167,10 @@ function getFriendlyManualSyncError(error: unknown, labels: ReturnType<typeof us
     return labels.groupMismatch;
   }
 
+  if (message.includes("different sync epoch")) {
+    return "This file belongs to a different key epoch. Pair or configure this device for the same epoch first.";
+  }
+
   if (
     message.includes("Unable to decrypt the sync payload") ||
     message.includes("passphrase is required") ||
@@ -187,6 +194,7 @@ export default function ManualSyncPage() {
   const [statusMessage, setStatusMessage] = useState<ManualSyncStatusMessage | null>(null);
   const [currentIdentity, setCurrentIdentity] = useState({
     userId: "",
+    keyEpoch: 1,
     deviceId: "",
     salt: "",
     passphrase: "",
@@ -202,6 +210,7 @@ export default function ManualSyncPage() {
     }
     setCurrentIdentity({
       userId: config.userId,
+      keyEpoch: config.keyEpoch,
       deviceId: config.deviceId,
       salt: config.salt,
       passphrase: resolvedPassphrase,
@@ -470,6 +479,10 @@ export default function ManualSyncPage() {
                 <div className="mt-1 font-mono">{currentIdentity.userId || "..."}</div>
               </div>
               <div className="border border-border px-3 py-3">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{labels.keyEpoch}</div>
+                <div className="mt-1 font-mono">{currentIdentity.keyEpoch}</div>
+              </div>
+              <div className="border border-border px-3 py-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{labels.device}</div>
                 <div className="mt-1 font-mono">{currentIdentity.deviceId || "..."}</div>
               </div>
@@ -518,6 +531,10 @@ export default function ManualSyncPage() {
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">{labels.importPreviewUser}</span>
                   <span className="font-mono">{importPreview.payload.userId}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">{labels.importPreviewEpoch}</span>
+                  <span className="font-mono">{importPreview.payload.keyEpoch}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-muted-foreground">{labels.importPreviewDevice}</span>

@@ -1,6 +1,7 @@
 import { Clock3, Smartphone } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +9,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 
 interface SyncPairingQrModalProps {
   open: boolean;
@@ -25,14 +25,17 @@ export function SyncPairingQrModal({
 }: SyncPairingQrModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md rounded-none border-2 border-foreground p-0" showCloseButton={false}>
+      <DialogContent
+        className="max-w-md rounded-none border-2 border-foreground p-0"
+        showCloseButton={false}
+      >
         <DialogHeader className="border-b-2 border-border px-6 py-5">
           <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
             <Smartphone className="h-5 w-5" />
             Add Phone
           </DialogTitle>
           <DialogDescription className="mt-2 text-sm">
-            同じWi-FiでこのQRを読み取ってください。1回だけ使えます。
+            Scan this on the same Wi-Fi. The phone will copy the sync settings and run the first sync.
           </DialogDescription>
         </DialogHeader>
 
@@ -45,11 +48,13 @@ export function SyncPairingQrModal({
 
           <div className="flex items-center gap-2 border border-border px-3 py-3 text-sm">
             <Clock3 className="h-4 w-4" />
-            <span>有効期限: {new Date(expiresAt).toLocaleString()}</span>
+            <span>Expires: {new Date(expiresAt).toLocaleString()}</span>
           </div>
 
           <div className="space-y-2">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">Pairing URL</div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
+              Pairing URL
+            </div>
             <div
               data-testid="pairing-url"
               className="break-all border border-dashed border-border px-3 py-3 font-mono text-xs"

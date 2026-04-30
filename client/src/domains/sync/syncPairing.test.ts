@@ -24,6 +24,7 @@ describe("sync pairing", () => {
     const payload = {
       pairingVersion: 1 as const,
       syncGroupId: "u_pairing_test",
+      keyEpoch: 1,
       groupSecret: "correct-horse-battery-staple",
       salt: "c3luYy10ZXN0LXNhbHQhIQ==",
       syncNodeUrl: "http://127.0.0.1:4010",

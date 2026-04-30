@@ -16,6 +16,7 @@ function toCanonicalNoteOp(op: NoteOp): NoteOp {
     opId: op.opId,
     deviceId: op.deviceId,
     userId: op.userId,
+    keyEpoch: op.keyEpoch,
     noteId: op.noteId,
     baseVersion: op.baseVersion,
     logicalTime: op.logicalTime,
@@ -95,15 +96,18 @@ export async function encryptNoteOpToEnvelope(
   const key = await deriveSyncKey(config, passphrase);
   const createdAt = new Date().toISOString();
   const canonicalOp = toCanonicalNoteOp(op);
+  const opBytes = textEncoder.encode(JSON.stringify(canonicalOp));
+  const contentHash = encodeBase64(await crypto.subtle.digest("SHA-256", opBytes));
   const aadPayload = envelopeAadSchema.parse({
     envelopeVersion: 1,
     senderDeviceId: config.deviceId,
     recipientUserId: config.userId,
+    keyEpoch: config.keyEpoch,
+    contentHash,
     createdAt,
   });
   const aadBytes = textEncoder.encode(JSON.stringify(aadPayload));
   const nonceBytes = crypto.getRandomValues(new Uint8Array(12));
-  const opBytes = textEncoder.encode(JSON.stringify(canonicalOp));
 
   const encrypted = await crypto.subtle.encrypt(
     {
@@ -120,6 +124,8 @@ export async function encryptNoteOpToEnvelope(
     envelopeVersion: 1,
     senderDeviceId: config.deviceId,
     recipientUserId: config.userId,
+    keyEpoch: config.keyEpoch,
+    contentHash,
     nonce: encodeBase64(nonceBytes),
     cipherText: encodeBase64(encrypted),
     aad: encodeBase64(aadBytes),
@@ -141,6 +147,14 @@ export async function decryptEnvelopeToNoteOp(
     throw new Error("Envelope recipient does not match the active sync group.");
   }
 
+  if (aad.keyEpoch !== config.keyEpoch || parsedEnvelope.keyEpoch !== config.keyEpoch) {
+    throw new Error("Envelope key epoch does not match the active sync epoch.");
+  }
+
+  if (aad.contentHash !== parsedEnvelope.contentHash) {
+    throw new Error("Envelope content hash metadata does not match.");
+  }
+
   let decrypted: ArrayBuffer;
 
   try {
@@ -160,8 +174,17 @@ export async function decryptEnvelopeToNoteOp(
     );
   }
 
+  const parsedOp = noteOpSchema.parse(JSON.parse(textDecoder.decode(decrypted)));
+  const canonicalOp = toCanonicalNoteOp(parsedOp);
+  const canonicalBytes = textEncoder.encode(JSON.stringify(canonicalOp));
+  const computedContentHash = encodeBase64(await crypto.subtle.digest("SHA-256", canonicalBytes));
+
+  if (computedContentHash !== parsedEnvelope.contentHash) {
+    throw new Error("Envelope content hash does not match the decrypted payload.");
+  }
+
   return {
     aad,
-    op: noteOpSchema.parse(JSON.parse(textDecoder.decode(decrypted))),
+    op: parsedOp,
   };
 }

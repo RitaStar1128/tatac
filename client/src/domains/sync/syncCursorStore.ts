@@ -6,12 +6,16 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-export function createSyncCursorId(userId: string, syncNodeUrl: string): string {
-  return `${userId}::${syncNodeUrl}`;
+export function createSyncCursorId(userId: string, keyEpoch: number, syncNodeUrl: string): string {
+  return `${userId}::${keyEpoch}::${syncNodeUrl}`;
 }
 
-export async function getSyncCursor(userId: string, syncNodeUrl: string): Promise<SyncCursorRecord> {
-  const id = createSyncCursorId(userId, syncNodeUrl);
+export async function getSyncCursor(
+  userId: string,
+  keyEpoch: number,
+  syncNodeUrl: string,
+): Promise<SyncCursorRecord> {
+  const id = createSyncCursorId(userId, keyEpoch, syncNodeUrl);
   const existing = await tatacDb.syncCursors.get(id);
 
   if (existing) {
@@ -21,6 +25,7 @@ export async function getSyncCursor(userId: string, syncNodeUrl: string): Promis
   const created = syncCursorRecordSchema.parse({
     id,
     userId,
+    keyEpoch,
     syncNodeUrl,
     lastPulledSeq: 0,
     updatedAt: nowIso(),
@@ -30,10 +35,16 @@ export async function getSyncCursor(userId: string, syncNodeUrl: string): Promis
   return created;
 }
 
-export async function setSyncCursor(userId: string, syncNodeUrl: string, lastPulledSeq: number): Promise<SyncCursorRecord> {
+export async function setSyncCursor(
+  userId: string,
+  keyEpoch: number,
+  syncNodeUrl: string,
+  lastPulledSeq: number,
+): Promise<SyncCursorRecord> {
   const updated = syncCursorRecordSchema.parse({
-    id: createSyncCursorId(userId, syncNodeUrl),
+    id: createSyncCursorId(userId, keyEpoch, syncNodeUrl),
     userId,
+    keyEpoch,
     syncNodeUrl,
     lastPulledSeq,
     updatedAt: nowIso(),
@@ -41,4 +52,8 @@ export async function setSyncCursor(userId: string, syncNodeUrl: string, lastPul
 
   await tatacDb.syncCursors.put(updated);
   return updated;
+}
+
+export async function clearAllSyncCursors(): Promise<void> {
+  await tatacDb.syncCursors.clear();
 }

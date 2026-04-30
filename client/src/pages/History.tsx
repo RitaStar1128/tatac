@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { StoredNoteRecord } from "@/db/tatacDb";
-import { deleteNote, listActiveNotes } from "@/domains/notes/noteRepository";
+import { deleteNote, listActiveNotes, subscribeToNotesChanged } from "@/domains/notes/noteRepository";
 import { deriveNoteExcerpt } from "@/domains/notes/noteText";
 
 function HistoryItem({
@@ -230,6 +230,9 @@ export default function HistoryPage() {
 
   useEffect(() => {
     void loadRecords();
+    return subscribeToNotesChanged(() => {
+      void loadRecords();
+    });
   }, []);
 
   const filteredRecords = useMemo(() => {

@@ -1,15 +1,33 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, LoaderCircle, Smartphone, TriangleAlert } from "lucide-react";
 import { useLocation } from "wouter";
 
 import { Button } from "@/components/ui/button";
-import { consumePairingFromLink } from "@/domains/sync/syncPairing";
+import {
+  completePairingJoin,
+  isPairingJoinBlockedError,
+  preparePairingJoinFromLink,
+  type PreparedPairingJoin,
+  type PairingConsumeResult,
+} from "@/domains/sync/syncPairing";
 import { decodeBase64Url } from "@shared/lib/base64url";
 
 type PairingState =
-  | { status: "loading" }
+  | { status: "loading"; resetting: boolean }
   | { status: "success"; sourceDeviceName: string; applied: number; pulled: number }
-  | { status: "error"; reason: "already-used" | "expired" | "node-unreachable" | "invalid" | "unknown"; message: string };
+  | {
+      status: "blocked";
+      summary: {
+        noteCount: number;
+        opCount: number;
+      };
+      sourceDeviceName: string;
+    }
+  | {
+      status: "error";
+      reason: "already-used" | "expired" | "node-unreachable" | "invalid" | "unknown";
+      message: string;
+    };
 
 const textDecoder = new TextDecoder();
 
@@ -33,34 +51,34 @@ function parsePairingUrl(): { sessionId: string; syncNodeUrl: string; pairingKey
   };
 }
 
-function toFriendlyError(error: unknown): PairingState & { status: "error" } {
+function toFriendlyError(error: unknown): Extract<PairingState, { status: "error" }> {
   const message = error instanceof Error ? error.message : "Unable to complete sync setup.";
   if (message.includes("already been used")) {
     return {
       status: "error",
       reason: "already-used",
-      message: "このQRコードはすでに使われています。PC側で新しいQRを出してください。",
+      message: "This QR code has already been used. Generate a new one on the PC.",
     };
   }
   if (message.includes("expired")) {
     return {
       status: "error",
       reason: "expired",
-      message: "このQRコードは期限切れです。PC側で新しいQRを出してください。",
+      message: "This QR code has expired. Generate a new one on the PC.",
     };
   }
   if (message.includes("Failed to fetch")) {
     return {
       status: "error",
       reason: "node-unreachable",
-      message: "同期ノードに接続できません。同じWi-Fiに接続してからもう一度試してください。",
+      message: "The phone could not reach the sync node. Make sure both devices are on the same Wi-Fi.",
     };
   }
   if (message.includes("invalid") || message.includes("incomplete")) {
     return {
       status: "error",
       reason: "invalid",
-      message: "このQRコードを読み取れませんでした。もう一度やり直してください。",
+      message: "This QR code is not valid for TATAC sync setup.",
     };
   }
   return {
@@ -70,50 +88,96 @@ function toFriendlyError(error: unknown): PairingState & { status: "error" } {
   };
 }
 
+function toSuccessState(result: PairingConsumeResult): Extract<PairingState, { status: "success" }> {
+  return {
+    status: "success",
+    sourceDeviceName: result.sourceDeviceName,
+    applied: result.syncResult.applied,
+    pulled: result.syncResult.pulled,
+  };
+}
+
 export default function SyncPairPage() {
   const [, setLocation] = useLocation();
-  const [state, setState] = useState<PairingState>({ status: "loading" });
-  const redirectDelayMs = 2000;
+  const [state, setState] = useState<PairingState>({ status: "loading", resetting: false });
+  const [preparedJoin, setPreparedJoin] = useState<PreparedPairingJoin | null>(null);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const redirectDelayMs = 2_000;
   const actionLabel = useMemo(
-    () => (state.status === "success" ? "履歴を見る" : "戻る"),
+    () => (state.status === "success" ? "Open history" : "Back"),
     [state.status],
   );
 
   useEffect(() => {
     let cancelled = false;
-    let redirectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const run = async () => {
+    const startPairing = async () => {
       try {
         const params = parsePairingUrl();
-        const result = await consumePairingFromLink(params);
+        const prepared = await preparePairingJoinFromLink(params);
         if (cancelled) return;
 
-        setState({
-          status: "success",
-          sourceDeviceName: result.sourceDeviceName,
-          applied: result.syncResult.applied,
-          pulled: result.syncResult.pulled,
-        });
+        setPreparedJoin(prepared);
 
-        redirectTimer = setTimeout(() => {
-          setLocation("/history");
-        }, redirectDelayMs);
+        try {
+          const result = await completePairingJoin(prepared);
+          if (cancelled) return;
+
+          setState(toSuccessState(result));
+          redirectTimerRef.current = setTimeout(() => {
+            setLocation("/history");
+          }, redirectDelayMs);
+        } catch (error) {
+          if (cancelled) return;
+          if (isPairingJoinBlockedError(error)) {
+            setState({
+              status: "blocked",
+              summary: {
+                noteCount: error.summary.noteCount,
+                opCount: error.summary.opCount,
+              },
+              sourceDeviceName: prepared.payload.sourceDeviceName,
+            });
+            return;
+          }
+
+          setState(toFriendlyError(error));
+        }
       } catch (error) {
         if (cancelled) return;
         setState(toFriendlyError(error));
       }
     };
 
-    void run();
+    void startPairing();
 
     return () => {
       cancelled = true;
-      if (redirectTimer) {
-        clearTimeout(redirectTimer);
+      if (redirectTimerRef.current) {
+        clearTimeout(redirectTimerRef.current);
       }
     };
   }, [setLocation]);
+
+  const handleResetAndJoin = async () => {
+    if (!preparedJoin) {
+      return;
+    }
+
+    setState({ status: "loading", resetting: true });
+
+    try {
+      const result = await completePairingJoin(preparedJoin, {
+        allowDestructiveReset: true,
+      });
+      setState(toSuccessState(result));
+      redirectTimerRef.current = setTimeout(() => {
+        setLocation("/history");
+      }, redirectDelayMs);
+    } catch (error) {
+      setState(toFriendlyError(error));
+    }
+  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
@@ -123,7 +187,9 @@ export default function SyncPairPage() {
             <Smartphone className="h-5 w-5" />
           </span>
           <div>
-            <div className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground">TATAC Sync</div>
+            <div className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground">
+              TATAC Sync
+            </div>
             <h1 className="text-2xl font-black uppercase tracking-tight">Phone Pairing</h1>
           </div>
         </div>
@@ -132,7 +198,11 @@ export default function SyncPairPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <LoaderCircle className="h-5 w-5 animate-spin" />
-              <p className="text-sm">同期設定を受け取って、初回同期を実行しています。</p>
+              <p className="text-sm">
+                {state.resetting
+                  ? "Clearing local notes and finishing sync setup..."
+                  : "Completing sync setup and pulling notes..."}
+              </p>
             </div>
           </div>
         )}
@@ -142,13 +212,52 @@ export default function SyncPairPage() {
             <div className="flex items-start gap-3 border border-border bg-muted/20 px-4 py-4">
               <CheckCircle2 className="mt-0.5 h-5 w-5" />
               <div className="text-sm">
-                <p>{state.sourceDeviceName} から設定を受け取りました。</p>
+                <p>Sync settings were copied from {state.sourceDeviceName}.</p>
                 <p className="mt-1 text-muted-foreground">
-                  {state.pulled}件を受信し、{state.applied}件を反映しました。
+                  Received {state.pulled} changes and applied {state.applied}.
                 </p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">まもなく履歴画面へ移動します。</p>
+            <p className="text-xs text-muted-foreground">Redirecting to history...</p>
+          </div>
+        )}
+
+        {state.status === "blocked" && (
+          <div className="space-y-4">
+            <div
+              data-testid="pairing-error"
+              data-pairing-error="non-empty-device"
+              className="flex items-start gap-3 border border-destructive/40 bg-destructive/5 px-4 py-4"
+            >
+              <TriangleAlert className="mt-0.5 h-5 w-5 text-destructive" />
+              <div className="space-y-2 text-sm">
+                <p>This device already has local notes.</p>
+                <p className="text-muted-foreground">
+                  Joining {state.sourceDeviceName} would require replacing {state.summary.noteCount} notes
+                  and {state.summary.opCount} local changes on this device.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="button"
+                onClick={() => {
+                  void handleResetAndJoin();
+                }}
+                className="rounded-none border-2 border-foreground bg-foreground font-bold uppercase tracking-[0.18em] text-background hover:bg-foreground/90"
+              >
+                Reset Local Data And Join
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLocation("/sync-settings")}
+                className="rounded-none border-2 border-foreground font-bold uppercase tracking-[0.18em]"
+              >
+                Keep Local Notes
+              </Button>
+            </div>
           </div>
         )}
 

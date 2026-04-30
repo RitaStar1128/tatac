@@ -11,9 +11,12 @@ describe("syncCrypto", () => {
     const config = persistedSyncConfigSchema.parse({
       id: "active",
       userId: "u_crypto_test",
+      keyEpoch: 1,
       deviceId: "d_crypto_test",
       deviceName: "Crypto Device",
       syncNodeUrl: "http://127.0.0.1:4010",
+      transportMode: "relay-only",
+      lanSyncEnabled: false,
       salt: "c3luYy10ZXN0LXNhbHQhIQ==",
       kdf: DEFAULT_SYNC_KDF_PARAMS,
       createdAt: "2026-04-30T10:00:00.000Z",
@@ -25,6 +28,7 @@ describe("syncCrypto", () => {
       opId: "op_crypto_1",
       deviceId: "d_crypto_test",
       userId: "u_crypto_test",
+      keyEpoch: 1,
       noteId: "note_crypto_1",
       baseVersion: 0,
       logicalTime: 1,
@@ -43,15 +47,20 @@ describe("syncCrypto", () => {
 
     expect(roundTrip.op).toEqual(op);
     expect(roundTrip.aad.recipientUserId).toBe(config.userId);
+    expect(roundTrip.aad.keyEpoch).toBe(config.keyEpoch);
+    expect(envelope.contentHash.length).toBeGreaterThan(10);
   });
 
   it("ignores local storage metadata when encrypting a stored note op", async () => {
     const config = persistedSyncConfigSchema.parse({
       id: "active",
       userId: "u_crypto_test",
+      keyEpoch: 1,
       deviceId: "d_crypto_test",
       deviceName: "Crypto Device",
       syncNodeUrl: "http://127.0.0.1:4010",
+      transportMode: "relay-only",
+      lanSyncEnabled: false,
       salt: "c3luYy10ZXN0LXNhbHQhIQ==",
       kdf: DEFAULT_SYNC_KDF_PARAMS,
       createdAt: "2026-04-30T10:00:00.000Z",
@@ -63,6 +72,7 @@ describe("syncCrypto", () => {
       opId: "op_crypto_2",
       deviceId: "d_crypto_test",
       userId: "u_crypto_test",
+      keyEpoch: 1,
       noteId: "note_crypto_2",
       baseVersion: 1,
       logicalTime: 2,

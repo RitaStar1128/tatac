@@ -10,11 +10,20 @@ import { projectNoteRecord } from "./noteProjection";
 import { deriveNoteTitle, normalizeNoteBody } from "./noteText";
 
 let initializationPromise: Promise<void> | null = null;
+const localNoteOpListeners = new Set<(op: NoteOp) => void>();
+const notesChangedListeners = new Set<() => void>();
 
 export interface NotesSnapshot {
   activeNotes: StoredNoteRecord[];
   tombstoneCount: number;
   opCount: number;
+}
+
+export interface LocalSyncDataSummary {
+  noteCount: number;
+  opCount: number;
+  groupIds: string[];
+  hasData: boolean;
 }
 
 export interface ManualSyncPreview {
@@ -40,6 +49,26 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function notifyLocalNoteOp(op: NoteOp): void {
+  for (const listener of Array.from(localNoteOpListeners)) {
+    try {
+      listener(op);
+    } catch (error) {
+      console.error("Local note op listener failed", error);
+    }
+  }
+}
+
+function notifyNotesChanged(): void {
+  for (const listener of Array.from(notesChangedListeners)) {
+    try {
+      listener();
+    } catch (error) {
+      console.error("Notes changed listener failed", error);
+    }
+  }
+}
+
 function toStoredNoteOp(
   op: NoteOp,
   origin: StoredNoteOp["origin"],
@@ -56,6 +85,10 @@ function toStoredNoteOp(
 
 function sortNotes(notes: StoredNoteRecord[]): StoredNoteRecord[] {
   return [...notes].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+}
+
+function isRecordInGroup(record: StoredNoteRecord | NoteRecord, groupId: string): boolean {
+  return record.groupId === groupId;
 }
 
 async function getCurrentLogicalTimeForRecord(record: NoteRecord | null): Promise<number | null> {
@@ -77,6 +110,7 @@ function buildCreateOp(params: {
   body: string;
   deviceId: string;
   userId: string;
+  keyEpoch: number;
 }): NoteOp {
   const timestamp = nowIso();
   const noteId = crypto.randomUUID();
@@ -84,6 +118,7 @@ function buildCreateOp(params: {
     opId: crypto.randomUUID(),
     deviceId: params.deviceId,
     userId: params.userId,
+    keyEpoch: params.keyEpoch,
     noteId,
     baseVersion: 0,
     logicalTime: 0,
@@ -103,12 +138,14 @@ function buildUpdateOp(params: {
   body: string;
   deviceId: string;
   userId: string;
+  keyEpoch: number;
 }): NoteOp {
   const timestamp = nowIso();
   return {
     opId: crypto.randomUUID(),
     deviceId: params.deviceId,
     userId: params.userId,
+    keyEpoch: params.keyEpoch,
     noteId: params.currentRecord.id,
     baseVersion: params.currentRecord.version,
     logicalTime: 0,
@@ -126,12 +163,14 @@ function buildDeleteOp(params: {
   currentRecord: StoredNoteRecord;
   deviceId: string;
   userId: string;
+  keyEpoch: number;
 }): NoteOp {
   const timestamp = nowIso();
   return {
     opId: crypto.randomUUID(),
     deviceId: params.deviceId,
     userId: params.userId,
+    keyEpoch: params.keyEpoch,
     noteId: params.currentRecord.id,
     baseVersion: params.currentRecord.version,
     logicalTime: 0,
@@ -237,6 +276,7 @@ function legacyRecordToNoteRecord(
     opId,
     deviceId,
     userId,
+    keyEpoch: 1,
     noteId: legacyRecord.id,
     baseVersion: 0,
     logicalTime,
@@ -258,6 +298,7 @@ function legacyRecordToNoteRecord(
     },
     record: {
       id: legacyRecord.id,
+      groupId: userId,
       title: deriveNoteTitle(body),
       body,
       createdAt,
@@ -282,26 +323,35 @@ export async function ensureOfflineStoreReady(): Promise<void> {
 
 export async function listActiveNotes(): Promise<StoredNoteRecord[]> {
   await ensureOfflineStoreReady();
-  const notes = await tatacDb.notes.toArray();
+  const config = await getOrCreateSyncConfig();
+  const notes = await tatacDb.notes.where("groupId").equals(config.userId).toArray();
   return sortNotes(notes.filter((note) => note.deletedAt === null));
 }
 
 export async function getNotesSnapshot(): Promise<NotesSnapshot> {
   await ensureOfflineStoreReady();
-  const [notes, opCount] = await Promise.all([tatacDb.notes.toArray(), tatacDb.noteOps.count()]);
+  const config = await getOrCreateSyncConfig();
+  const [notes, ops] = await Promise.all([
+    tatacDb.notes.where("groupId").equals(config.userId).toArray(),
+    listAllNoteOpsForUser(config.userId, config.keyEpoch),
+  ]);
   const activeNotes = sortNotes(notes.filter((note) => note.deletedAt === null));
   const tombstoneCount = notes.filter((note) => note.deletedAt !== null).length;
 
   return {
     activeNotes,
     tombstoneCount,
-    opCount,
+    opCount: ops.length,
   };
 }
 
 export async function getNoteById(noteId: string): Promise<StoredNoteRecord | null> {
   await ensureOfflineStoreReady();
-  return (await tatacDb.notes.get(noteId)) ?? null;
+  const [config, record] = await Promise.all([getOrCreateSyncConfig(), tatacDb.notes.get(noteId)]);
+  if (!record || !isRecordInGroup(record, config.userId)) {
+    return null;
+  }
+  return record;
 }
 
 export async function createNote(bodyInput: string): Promise<StoredNoteRecord> {
@@ -311,26 +361,37 @@ export async function createNote(bodyInput: string): Promise<StoredNoteRecord> {
     throw new Error("Cannot create an empty note.");
   }
 
-  return tatacDb.transaction("rw", tatacDb.notes, tatacDb.noteOps, tatacDb.syncConfig, async () => {
+  let createdOp: NoteOp | null = null;
+  const note = await tatacDb.transaction("rw", tatacDb.notes, tatacDb.noteOps, tatacDb.syncConfig, async () => {
     const config = await getOrCreateSyncConfig();
     const op = buildCreateOp({
       body,
       deviceId: config.deviceId,
       userId: config.userId,
+      keyEpoch: config.keyEpoch,
     });
     op.logicalTime = await getNextLogicalTime(config.deviceId);
     const result = await writeNoteOp(op, null, "local");
     if (!result.note) {
       throw new Error("Create note operation failed.");
     }
+    createdOp = op;
     return result.note;
   });
+
+  if (createdOp) {
+    notifyLocalNoteOp(createdOp);
+  }
+  notifyNotesChanged();
+
+  return note;
 }
 
 export async function updateNote(noteId: string, bodyInput: string): Promise<StoredNoteRecord> {
   await ensureOfflineStoreReady();
+  const config = await getOrCreateSyncConfig();
   const currentRecord = await tatacDb.notes.get(noteId);
-  if (!currentRecord || currentRecord.deletedAt !== null) {
+  if (!currentRecord || currentRecord.deletedAt !== null || !isRecordInGroup(currentRecord, config.userId)) {
     throw new Error("Note not found.");
   }
 
@@ -339,44 +400,63 @@ export async function updateNote(noteId: string, bodyInput: string): Promise<Sto
     throw new Error("Cannot save an empty note.");
   }
 
-  return tatacDb.transaction("rw", tatacDb.notes, tatacDb.noteOps, tatacDb.syncConfig, async () => {
-    const config = await getOrCreateSyncConfig();
+  let updatedOp: NoteOp | null = null;
+  const note = await tatacDb.transaction("rw", tatacDb.notes, tatacDb.noteOps, tatacDb.syncConfig, async () => {
     const op = buildUpdateOp({
       currentRecord,
       body,
       deviceId: config.deviceId,
       userId: config.userId,
+      keyEpoch: config.keyEpoch,
     });
     op.logicalTime = await getNextLogicalTime(config.deviceId);
     const result = await writeNoteOp(op, currentRecord, "local");
     if (!result.note) {
       throw new Error("Update note operation failed.");
     }
+    updatedOp = op;
     return result.note;
   });
+
+  if (updatedOp) {
+    notifyLocalNoteOp(updatedOp);
+  }
+  notifyNotesChanged();
+
+  return note;
 }
 
 export async function deleteNote(noteId: string): Promise<StoredNoteRecord> {
   await ensureOfflineStoreReady();
+  const config = await getOrCreateSyncConfig();
   const currentRecord = await tatacDb.notes.get(noteId);
-  if (!currentRecord || currentRecord.deletedAt !== null) {
+  if (!currentRecord || currentRecord.deletedAt !== null || !isRecordInGroup(currentRecord, config.userId)) {
     throw new Error("Note not found.");
   }
 
-  return tatacDb.transaction("rw", tatacDb.notes, tatacDb.noteOps, tatacDb.syncConfig, async () => {
-    const config = await getOrCreateSyncConfig();
+  let deletedOp: NoteOp | null = null;
+  const note = await tatacDb.transaction("rw", tatacDb.notes, tatacDb.noteOps, tatacDb.syncConfig, async () => {
     const op = buildDeleteOp({
       currentRecord,
       deviceId: config.deviceId,
       userId: config.userId,
+      keyEpoch: config.keyEpoch,
     });
     op.logicalTime = await getNextLogicalTime(config.deviceId);
     const result = await writeNoteOp(op, currentRecord, "local");
     if (!result.note) {
       throw new Error("Delete note operation failed.");
     }
+    deletedOp = op;
     return result.note;
   });
+
+  if (deletedOp) {
+    notifyLocalNoteOp(deletedOp);
+  }
+  notifyNotesChanged();
+
+  return note;
 }
 
 export async function applyInboundNoteOp(
@@ -384,26 +464,35 @@ export async function applyInboundNoteOp(
   origin: Extract<StoredNoteOp["origin"], "remote" | "import">,
 ): Promise<AppliedNoteOpResult> {
   await ensureOfflineStoreReady();
-  const currentRecord = (await tatacDb.notes.get(op.noteId)) ?? null;
+  const storedRecord = (await tatacDb.notes.get(op.noteId)) ?? null;
+  const currentRecord =
+    storedRecord && isRecordInGroup(storedRecord, op.userId) ? storedRecord : null;
 
-  return tatacDb.transaction("rw", tatacDb.notes, tatacDb.noteOps, async () =>
+  const result = await tatacDb.transaction("rw", tatacDb.notes, tatacDb.noteOps, async () =>
     writeNoteOp(op, currentRecord, origin),
   );
+  notifyNotesChanged();
+  return result;
 }
 
-export async function listAllNoteOpsForUser(userId: string): Promise<StoredNoteOp[]> {
+export async function listAllNoteOpsForUser(userId: string, keyEpoch: number): Promise<StoredNoteOp[]> {
   await ensureOfflineStoreReady();
   const items = await tatacDb.noteOps
-    .where("[userId+logicalTime]")
-    .between([userId, Dexie.minKey], [userId, Dexie.maxKey])
+    .where("[userId+keyEpoch+logicalTime]")
+    .between([userId, keyEpoch, Dexie.minKey], [userId, keyEpoch, Dexie.maxKey])
     .toArray();
 
   return items.sort((left, right) => left.logicalTime - right.logicalTime);
 }
 
-export async function listPendingPushNoteOps(userId: string): Promise<StoredNoteOp[]> {
-  const items = await listAllNoteOpsForUser(userId);
+export async function listPendingPushNoteOps(userId: string, keyEpoch: number): Promise<StoredNoteOp[]> {
+  const items = await listAllNoteOpsForUser(userId, keyEpoch);
   return items.filter((item) => item.acknowledgedAt === undefined);
+}
+
+export async function hasPendingPushNoteOps(userId: string, keyEpoch: number): Promise<boolean> {
+  const items = await listPendingPushNoteOps(userId, keyEpoch);
+  return items.length > 0;
 }
 
 export async function markNoteOpsAcknowledged(opIds: string[]): Promise<void> {
@@ -435,5 +524,54 @@ export async function buildManualSyncPreview(): Promise<ManualSyncPreview> {
     activeNoteCount: snapshot.activeNotes.length,
     tombstoneCount: snapshot.tombstoneCount,
     opCount: snapshot.opCount,
+  };
+}
+
+export async function getLocalSyncDataSummary(): Promise<LocalSyncDataSummary> {
+  await ensureOfflineStoreReady();
+  const [notes, ops] = await Promise.all([tatacDb.notes.toArray(), tatacDb.noteOps.toArray()]);
+  const groupIds = new Set<string>();
+
+  for (const note of notes) {
+    if (note.groupId) {
+      groupIds.add(note.groupId);
+    }
+  }
+
+  for (const op of ops) {
+    if (op.userId) {
+      groupIds.add(op.userId);
+    }
+  }
+
+  return {
+    noteCount: notes.length,
+    opCount: ops.length,
+    groupIds: Array.from(groupIds).sort(),
+    hasData: notes.length > 0 || ops.length > 0,
+  };
+}
+
+export async function clearLocalNotesAndOps(): Promise<void> {
+  await ensureOfflineStoreReady();
+  await tatacDb.transaction("rw", tatacDb.notes, tatacDb.noteOps, async () => {
+    await tatacDb.notes.clear();
+    await tatacDb.noteOps.clear();
+  });
+  clearStoredRecords();
+  notifyNotesChanged();
+}
+
+export function subscribeToLocalNoteOps(listener: (op: NoteOp) => void): () => void {
+  localNoteOpListeners.add(listener);
+  return () => {
+    localNoteOpListeners.delete(listener);
+  };
+}
+
+export function subscribeToNotesChanged(listener: () => void): () => void {
+  notesChangedListeners.add(listener);
+  return () => {
+    notesChangedListeners.delete(listener);
   };
 }

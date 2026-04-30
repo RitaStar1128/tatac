@@ -1,10 +1,18 @@
 import { encodeBase64Url } from "@shared/lib/base64url";
+import type { PairingBundlePayload, SyncNodeCandidate } from "@shared/contracts";
 
-import { getOrCreateSyncConfig, saveSyncSettingsDraft } from "./syncSettingsStore";
-import { savePersistedSyncSecret, getPersistedSyncSecret } from "./persistedSyncSecretStore";
-import { getSyncSessionSecret, setSyncSessionSecret } from "./sessionSecretStore";
+import { clearLocalNotesAndOps, getLocalSyncDataSummary, type LocalSyncDataSummary } from "@/domains/notes/noteRepository";
+
+import { getOrCreateSyncConfig, replaceSyncGroupSettings, saveSyncSettingsDraft } from "./syncSettingsStore";
+import {
+  clearPersistedSyncSecret,
+  getPersistedSyncSecret,
+  savePersistedSyncSecret,
+} from "./persistedSyncSecretStore";
+import { clearSyncSessionSecret, getSyncSessionSecret, setSyncSessionSecret } from "./sessionSecretStore";
 import { syncWithNode, type SyncRunResult } from "./syncEngine";
 import { createPairingKey, createPairingKeyHash, decryptPairingBundle, encryptPairingBundle } from "./pairingCrypto";
+import { clearAllSyncCursors } from "./syncCursorStore";
 import { consumePairingSession, createPairingSession, fetchBootstrap } from "./syncTransport";
 
 const DEFAULT_BOOTSTRAP_URL = "http://127.0.0.1:4010";
@@ -22,8 +30,8 @@ function createGroupSecret(): string {
 
 function resolvePairingAppUrl(): string {
   if (typeof window !== "undefined") {
-    const { origin, hostname } = window.location;
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
+    const { origin } = window.location;
+    if (origin.startsWith("http://") || origin.startsWith("https://")) {
       return `${origin}/sync-pair`;
     }
   }
@@ -40,6 +48,7 @@ export interface EnableSyncResult {
   nodeId: string;
   serverTime: string;
   candidateUrls: string[];
+  candidates: SyncNodeCandidate[];
 }
 
 export interface PairingSessionResult {
@@ -48,10 +57,38 @@ export interface PairingSessionResult {
   sessionId: string;
 }
 
+export interface PreparedPairingJoin {
+  syncNodeUrl: string;
+  sessionId: string;
+  pairingKey: string;
+  payload: PairingBundlePayload;
+}
+
 export interface PairingConsumeResult {
   sourceDeviceName: string;
   sourceDeviceId: string;
   syncResult: SyncRunResult;
+}
+
+export class PairingJoinBlockedError extends Error {
+  readonly reason = "non-empty-device";
+  readonly summary: LocalSyncDataSummary;
+  readonly targetGroupId: string;
+
+  constructor(summary: LocalSyncDataSummary, targetGroupId: string) {
+    super("This device already has local notes from another sync group.");
+    this.name = "PairingJoinBlockedError";
+    this.summary = summary;
+    this.targetGroupId = targetGroupId;
+  }
+}
+
+export function isPairingJoinBlockedError(error: unknown): error is PairingJoinBlockedError {
+  return error instanceof PairingJoinBlockedError;
+}
+
+function hasForeignLocalGroup(summary: LocalSyncDataSummary, targetGroupId: string): boolean {
+  return summary.groupIds.some((groupId) => groupId !== targetGroupId);
 }
 
 export async function enableSyncOnThisDevice(input?: {
@@ -73,8 +110,11 @@ export async function enableSyncOnThisDevice(input?: {
 
   const updatedConfig = await saveSyncSettingsDraft({
     userId: config.userId,
+    keyEpoch: config.keyEpoch,
     deviceName: config.deviceName,
     syncNodeUrl: bootstrap.defaultCandidateUrl,
+    transportMode: "lan-direct",
+    lanSyncEnabled: true,
     salt: config.salt,
   });
 
@@ -83,12 +123,16 @@ export async function enableSyncOnThisDevice(input?: {
     nodeId: bootstrap.nodeId,
     serverTime: bootstrap.serverTime,
     candidateUrls: bootstrap.candidateUrls,
+    candidates: bootstrap.candidates,
   };
 }
 
-export async function createPairingSessionForMobile(): Promise<PairingSessionResult> {
+export async function createPairingSessionForMobile(input?: {
+  syncNodeUrlOverride?: string;
+}): Promise<PairingSessionResult> {
   const config = await getOrCreateSyncConfig();
-  if (!config.syncNodeUrl) {
+  const selectedNodeUrl = input?.syncNodeUrlOverride?.trim() || config.syncNodeUrl;
+  if (!selectedNodeUrl) {
     throw new Error("Enable sync on this PC before adding another device.");
   }
 
@@ -98,7 +142,6 @@ export async function createPairingSessionForMobile(): Promise<PairingSessionRes
     throw new Error("The sync secret is not ready on this device yet.");
   }
 
-  const bootstrap = await fetchBootstrap(config.syncNodeUrl);
   const createdAt = nowIso();
   const expiresAt = new Date(Date.now() + DEFAULT_PAIRING_TTL_MS).toISOString();
   const pairingKey = createPairingKey();
@@ -106,9 +149,10 @@ export async function createPairingSessionForMobile(): Promise<PairingSessionRes
     {
       pairingVersion: 1,
       syncGroupId: config.userId,
+      keyEpoch: config.keyEpoch,
       groupSecret,
       salt: config.salt,
-      syncNodeUrl: bootstrap.defaultCandidateUrl,
+      syncNodeUrl: selectedNodeUrl,
       sourceDeviceId: config.deviceId,
       sourceDeviceName: config.deviceName,
       createdAt,
@@ -118,13 +162,13 @@ export async function createPairingSessionForMobile(): Promise<PairingSessionRes
   );
 
   const pairingKeyHash = await createPairingKeyHash(pairingKey);
-  const created = await createPairingSession(config.syncNodeUrl, {
+  const created = await createPairingSession(selectedNodeUrl, {
     pairingKeyHash,
     bundle,
   });
 
   const pairingUrl = new URL(resolvePairingAppUrl());
-  pairingUrl.searchParams.set("node", encodeStringAsBase64Url(bootstrap.defaultCandidateUrl));
+  pairingUrl.searchParams.set("node", encodeStringAsBase64Url(selectedNodeUrl));
   pairingUrl.searchParams.set("sid", created.sessionId);
   pairingUrl.hash = `k=${pairingKey}`;
 
@@ -135,37 +179,76 @@ export async function createPairingSessionForMobile(): Promise<PairingSessionRes
   };
 }
 
-export async function consumePairingFromLink(input: {
+export async function preparePairingJoinFromLink(input: {
   syncNodeUrl: string;
   sessionId: string;
   pairingKey: string;
-}): Promise<PairingConsumeResult> {
+}): Promise<PreparedPairingJoin> {
   const consumed = await consumePairingSession(input.syncNodeUrl, {
     sessionId: input.sessionId,
     pairingKey: input.pairingKey,
   });
   const payload = await decryptPairingBundle(consumed.bundle, input.pairingKey);
-  const currentConfig = await getOrCreateSyncConfig();
 
-  await saveSyncSettingsDraft({
-    userId: payload.syncGroupId,
+  return {
+    syncNodeUrl: input.syncNodeUrl,
+    sessionId: input.sessionId,
+    pairingKey: input.pairingKey,
+    payload,
+  };
+}
+
+export async function completePairingJoin(
+  prepared: PreparedPairingJoin,
+  options?: {
+    allowDestructiveReset?: boolean;
+  },
+): Promise<PairingConsumeResult> {
+  const currentConfig = await getOrCreateSyncConfig();
+  const summary = await getLocalSyncDataSummary();
+
+  if (hasForeignLocalGroup(summary, prepared.payload.syncGroupId) && !options?.allowDestructiveReset) {
+    throw new PairingJoinBlockedError(summary, prepared.payload.syncGroupId);
+  }
+
+  if (options?.allowDestructiveReset) {
+    await clearLocalNotesAndOps();
+    await clearAllSyncCursors();
+    await clearPersistedSyncSecret();
+    clearSyncSessionSecret();
+  }
+
+  await replaceSyncGroupSettings({
+    userId: prepared.payload.syncGroupId,
+    keyEpoch: prepared.payload.keyEpoch,
     deviceName: currentConfig.deviceName,
-    syncNodeUrl: payload.syncNodeUrl,
-    salt: payload.salt,
+    syncNodeUrl: prepared.payload.syncNodeUrl,
+    transportMode: "lan-direct",
+    lanSyncEnabled: true,
+    salt: prepared.payload.salt,
   });
   await savePersistedSyncSecret({
-    groupSecret: payload.groupSecret,
+    groupSecret: prepared.payload.groupSecret,
     origin: "paired",
   });
-  setSyncSessionSecret({ passphrase: payload.groupSecret });
+  setSyncSessionSecret({ passphrase: prepared.payload.groupSecret });
 
   const syncResult = await syncWithNode();
 
   return {
-    sourceDeviceName: payload.sourceDeviceName,
-    sourceDeviceId: payload.sourceDeviceId,
+    sourceDeviceName: prepared.payload.sourceDeviceName,
+    sourceDeviceId: prepared.payload.sourceDeviceId,
     syncResult,
   };
+}
+
+export async function consumePairingFromLink(input: {
+  syncNodeUrl: string;
+  sessionId: string;
+  pairingKey: string;
+}): Promise<PairingConsumeResult> {
+  const prepared = await preparePairingJoinFromLink(input);
+  return completePairingJoin(prepared);
 }
 
 export function getDefaultBootstrapUrl(): string {

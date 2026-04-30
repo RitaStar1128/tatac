@@ -1,23 +1,29 @@
-# TATAC Sync MVP API
+# TATAC Sync API
 
 ## Scope
 
-This document freezes the MVP wire contract for the LAN sync node and the `.tatacsync` fallback file.
+This document defines the current wire contract for:
 
-Design assumptions:
+- the LAN sync node
+- realtime signaling and presence
+- QR pairing bootstrap
+- the `.tatacsync` fallback file
 
-- the node is a transport relay, not a source of truth
-- payload plaintext is never sent to the node
-- all request and response bodies are JSON
-- request validation is enforced with Zod-compatible schemas
+The sync model is local-first:
+
+- each device keeps the source of truth locally
+- the node stores opaque encrypted envelopes only
+- the node also routes opaque encrypted WebRTC signaling payloads
+- streams are partitioned by `userId + keyEpoch`
 
 ## Common Rules
 
-- `userId` identifies a sync group.
+- `userId` is the sync group identifier exposed by the current API.
+- `keyEpoch` is the active cryptographic epoch inside that group.
 - `deviceId` identifies a concrete client installation.
-- envelope contents are opaque to the node.
+- request and response bodies are JSON.
 - timestamps use ISO-8601 UTC strings.
-- the node stores envelopes in monotonically increasing `seq` order per user group.
+- envelope ciphertext is opaque to the node.
 
 ## Envelope Contract
 
@@ -26,28 +32,142 @@ Design assumptions:
   "envelopeVersion": 1,
   "senderDeviceId": "d_phone_01",
   "recipientUserId": "u_abc123",
+  "keyEpoch": 2,
+  "contentHash": "base64...",
   "nonce": "base64...",
   "cipherText": "base64...",
   "aad": "base64...",
-  "createdAt": "2026-04-30T10:00:00.000Z"
+  "createdAt": "2026-05-01T10:00:00.000Z"
 }
 ```
 
 Notes:
 
-- `cipherText` is an AES-GCM encrypted serialized `NoteOp`
-- `aad` is a serialized authenticated metadata blob encoded as base64
-- `recipientUserId` is used by the node for partitioning
+- `cipherText` is AES-GCM encrypted `NoteOp` JSON.
+- `aad` is authenticated metadata encoded as base64.
+- `contentHash` is a client-computed SHA-256 hash of the canonical plaintext op and is used for node-side dedupe.
+- `keyEpoch` is required in both transport metadata and decrypted payloads.
+
+## Bootstrap Candidate Contract
+
+```json
+{
+  "url": "http://192.168.0.10:4010",
+  "label": "Wi-Fi (192.168.0.10)",
+  "kind": "lan",
+  "address": "192.168.0.10",
+  "interfaceName": "Wi-Fi"
+}
+```
+
+Rules:
+
+- `kind` is one of `loopback`, `lan`, or `explicit`
+- the client may display all candidates and choose which one is embedded in the pairing QR
+- `defaultCandidateUrl` is only the suggested initial choice
+
+## Bootstrap Realtime Contract
+
+```json
+{
+  "signalingWebSocketUrl": "ws://192.168.0.10:4010/api/v1/realtime",
+  "iceServers": [
+    {
+      "urls": ["stun:stun.example.net:3478"]
+    },
+    {
+      "urls": ["turn:turn.example.net:3478?transport=udp"],
+      "username": "turn-user",
+      "credential": "turn-password",
+      "credentialType": "password"
+    }
+  ],
+  "expiresAt": "2026-05-01T11:00:00.000Z"
+}
+```
+
+Notes:
+
+- `signalingWebSocketUrl` is generated from the node origin that served `/bootstrap`
+- `iceServers` is the single source of truth for STUN/TURN config
+- `expiresAt` is optional and only present for refreshable TURN credentials
+
+## GET /api/v1/bootstrap
+
+Returns bootstrap metadata for PC-led onboarding.
+
+Response:
+
+```json
+{
+  "ok": true,
+  "nodeId": "node_home_pc",
+  "serverTime": "2026-05-01T10:00:00.000Z",
+  "candidateUrls": [
+    "http://127.0.0.1:4010",
+    "http://192.168.0.10:4010"
+  ],
+  "candidates": [
+    {
+      "url": "http://127.0.0.1:4010",
+      "label": "Loopback",
+      "kind": "loopback",
+      "address": "127.0.0.1"
+    },
+    {
+      "url": "http://192.168.0.10:4010",
+      "label": "Wi-Fi (192.168.0.10)",
+      "kind": "lan",
+      "address": "192.168.0.10",
+      "interfaceName": "Wi-Fi"
+    }
+  ],
+  "defaultCandidateUrl": "http://192.168.0.10:4010",
+  "realtime": {
+    "signalingWebSocketUrl": "ws://127.0.0.1:4010/api/v1/realtime",
+    "iceServers": []
+  }
+}
+```
+
+## WebSocket /api/v1/realtime
+
+Used for:
+
+- presence registration
+- peer join/leave events
+- encrypted SDP/ICE signaling
+- relay hints when new envelopes land on the node
+
+Client -> node messages:
+
+- `presence.register`
+- `presence.leave`
+- `signal.forward`
+- `ping`
+
+Node -> client messages:
+
+- `presence.snapshot`
+- `peer.joined`
+- `peer.left`
+- `signal.deliver`
+- `relay.hint`
+- `pong`
+- `error`
+
+All signaling payloads remain opaque to the node. The node only validates the outer message shape and routes by `groupId + keyEpoch + deviceId`.
 
 ## POST /api/v1/register-device
 
-Registers or refreshes a client device for the specified sync group.
+Registers or refreshes a device for one sync epoch.
 
 Request:
 
 ```json
 {
   "userId": "u_abc123",
+  "keyEpoch": 2,
   "deviceId": "d_phone_01",
   "deviceName": "Rita iPhone",
   "clientVersion": "0.1.0"
@@ -60,34 +180,32 @@ Response:
 {
   "ok": true,
   "nodeId": "node_home_pc",
-  "registeredAt": "2026-04-30T10:00:00.000Z"
+  "registeredAt": "2026-05-01T10:00:00.000Z"
 }
 ```
 
-MVP behavior:
-
-- idempotent for the same `userId + deviceId`
-- may refresh `deviceName` and `clientVersion`
-
 ## POST /api/v1/push
 
-Appends encrypted envelopes to the relay stream for a sync group.
+Pushes encrypted envelopes into the relay stream for one `userId + keyEpoch`.
 
 Request:
 
 ```json
 {
   "userId": "u_abc123",
+  "keyEpoch": 2,
   "deviceId": "d_phone_01",
   "envelopes": [
     {
       "envelopeVersion": 1,
       "senderDeviceId": "d_phone_01",
       "recipientUserId": "u_abc123",
+      "keyEpoch": 2,
+      "contentHash": "base64...",
       "nonce": "base64...",
       "cipherText": "base64...",
       "aad": "base64...",
-      "createdAt": "2026-04-30T10:01:00.000Z"
+      "createdAt": "2026-05-01T10:01:00.000Z"
     }
   ]
 }
@@ -99,26 +217,27 @@ Response:
 {
   "ok": true,
   "accepted": 1,
+  "acceptedContentHashes": ["base64..."],
   "lastSeq": 128
 }
 ```
 
-MVP behavior:
+Behavior:
 
-- the node validates outer envelope shape only
-- the node does not decrypt or inspect payload plaintext
-- `accepted` is the count stored by the node
-- duplicate logical ops may still arrive as separate envelopes; clients must dedupe by `opId` after decrypt
+- node-side dedupe is keyed by `contentHash`
+- repeated push of the same logical op does not append a second envelope
+- `acceptedContentHashes` is the authoritative acknowledgment set for the client
 
 ## POST /api/v1/pull
 
-Returns envelopes newer than the caller's cursor.
+Returns envelopes newer than the caller cursor for one epoch.
 
 Request:
 
 ```json
 {
   "userId": "u_abc123",
+  "keyEpoch": 2,
   "deviceId": "d_android_01",
   "afterSeq": 120,
   "limit": 200
@@ -137,10 +256,12 @@ Response:
         "envelopeVersion": 1,
         "senderDeviceId": "d_phone_01",
         "recipientUserId": "u_abc123",
+        "keyEpoch": 2,
+        "contentHash": "base64...",
         "nonce": "base64...",
         "cipherText": "base64...",
         "aad": "base64...",
-        "createdAt": "2026-04-30T10:01:00.000Z"
+        "createdAt": "2026-05-01T10:01:00.000Z"
       }
     }
   ],
@@ -149,12 +270,11 @@ Response:
 }
 ```
 
-MVP behavior:
+Behavior:
 
 - `afterSeq` is exclusive
-- `limit` is clamped by server-side maximum
-- returned items may include envelopes originally sent by the same device
-- the client advances its local cursor only after successful decrypt + apply
+- node cursor state is tracked per `deviceId + userId + keyEpoch`
+- old epochs are not returned when pulling the current epoch
 
 ## GET /api/v1/health
 
@@ -164,70 +284,101 @@ Response:
 {
   "ok": true,
   "nodeId": "node_home_pc",
-  "serverTime": "2026-04-30T10:02:00.000Z"
+  "serverTime": "2026-05-01T10:02:00.000Z"
 }
 ```
 
-Purpose:
+## POST /api/v1/pairing-sessions
 
-- connectivity check from sync settings/sync screen
-- server clock visibility for debugging
+Stores an opaque one-time pairing bundle.
 
-## Error Handling
-
-MVP status codes:
-
-- `200`: request accepted
-- `400`: schema validation error
-- `404`: unknown route
-- `413`: payload too large
-- `500`: unexpected node failure
-
-Suggested validation error shape:
+Request:
 
 ```json
 {
-  "ok": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid request body"
+  "pairingKeyHash": "base64url...",
+  "bundle": {
+    "pairingVersion": 1,
+    "nonce": "base64...",
+    "cipherText": "base64...",
+    "aad": "base64...",
+    "createdAt": "2026-05-01T10:00:00.000Z",
+    "expiresAt": "2026-05-01T10:10:00.000Z"
   }
 }
 ```
 
-Suggested server error shape:
+Response:
 
 ```json
 {
-  "ok": false,
-  "error": {
-    "code": "INTERNAL_ERROR",
-    "message": "Unexpected sync node error"
+  "ok": true,
+  "sessionId": "ps_123",
+  "expiresAt": "2026-05-01T10:10:00.000Z"
+}
+```
+
+## POST /api/v1/consume-pairing-session
+
+Consumes a one-time pairing session.
+
+Request:
+
+```json
+{
+  "sessionId": "ps_123",
+  "pairingKey": "base64url..."
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "nodeId": "node_home_pc",
+  "serverTime": "2026-05-01T10:02:00.000Z",
+  "bundle": {
+    "pairingVersion": 1,
+    "nonce": "base64...",
+    "cipherText": "base64...",
+    "aad": "base64...",
+    "createdAt": "2026-05-01T10:00:00.000Z",
+    "expiresAt": "2026-05-01T10:10:00.000Z"
   }
 }
 ```
+
+Behavior:
+
+- sessions are one-time use
+- expired sessions are cleanup candidates
+- node stores the bundle but not the plaintext pairing secret
 
 ## `.tatacsync` File
 
-The manual fallback file contains encrypted envelopes plus sync metadata required for key derivation.
+Manual fallback is also scoped to `userId + keyEpoch`.
 
 ```json
 {
   "fileType": "tatacsync",
   "version": 1,
-  "exportedAt": "2026-04-30T10:10:00.000Z",
+  "exportedAt": "2026-05-01T10:10:00.000Z",
   "fromDeviceId": "d_phone_01",
   "userId": "u_abc123",
+  "keyEpoch": 2,
   "salt": "base64...",
   "items": [
     {
       "envelopeVersion": 1,
       "senderDeviceId": "d_phone_01",
       "recipientUserId": "u_abc123",
+      "keyEpoch": 2,
+      "contentHash": "base64...",
       "nonce": "base64...",
       "cipherText": "base64...",
       "aad": "base64...",
-      "createdAt": "2026-04-30T10:01:00.000Z"
+      "createdAt": "2026-05-01T10:01:00.000Z"
     }
   ]
 }
@@ -235,15 +386,24 @@ The manual fallback file contains encrypted envelopes plus sync metadata require
 
 Import rules:
 
-- reject if `fileType` or `version` is unsupported
-- reject if `userId` does not match the active sync group unless the user explicitly rebinds settings in a later UI flow
-- use file `salt` for key derivation
+- reject unsupported `fileType` or `version`
+- reject mismatched `userId`
+- reject mismatched `keyEpoch`
+- reject mismatched `salt`
 - decrypt locally and dedupe by `opId`
 
-## Deferred For Later Phases
+## Node Retention and Cleanup
 
-- automatic LAN discovery
-- auth beyond `userId + passphrase`
-- CRDT transport or merge semantics
-- tombstone garbage collection
-- attachment sync
+- pairing sessions are removed when expired
+- duplicate envelopes are suppressed by `contentHash`
+- envelope streams are pruned per epoch after active devices advance beyond the retention window
+
+## Error Handling
+
+Current status codes:
+
+- `200`: request accepted
+- `400`: validation error
+- `404`: unknown route or cleaned-up pairing session
+- `409`: expired/already-used pairing session
+- `500`: unexpected node failure

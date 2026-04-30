@@ -2,11 +2,13 @@ import { z } from "zod";
 
 import {
   base64StringSchema,
+  bootstrapRealtimeConfigSchema,
   clientVersionSchema,
   deviceIdSchema,
   deviceNameSchema,
   encryptedEnvelopeSchema,
   isoDateTimeStringSchema,
+  keyEpochSchema,
   nodeIdSchema,
   nonNegativeIntSchema,
   pairingBundleSchema,
@@ -15,9 +17,20 @@ import {
   userIdSchema,
 } from "./domain";
 
+export const syncNodeCandidateSchema = z
+  .object({
+    url: syncNodeUrlSchema,
+    label: z.string().min(1),
+    kind: z.enum(["loopback", "lan", "explicit"]),
+    address: z.string().min(1),
+    interfaceName: z.string().min(1).optional(),
+  })
+  .strict();
+
 export const registerDeviceRequestSchema = z
   .object({
     userId: userIdSchema,
+    keyEpoch: keyEpochSchema,
     deviceId: deviceIdSchema,
     deviceName: deviceNameSchema,
     clientVersion: clientVersionSchema,
@@ -35,6 +48,7 @@ export const registerDeviceResponseSchema = z
 export const pushRequestSchema = z
   .object({
     userId: userIdSchema,
+    keyEpoch: keyEpochSchema,
     deviceId: deviceIdSchema,
     envelopes: z.array(encryptedEnvelopeSchema),
   })
@@ -44,6 +58,7 @@ export const pushResponseSchema = z
   .object({
     ok: z.literal(true),
     accepted: nonNegativeIntSchema,
+    acceptedContentHashes: z.array(base64StringSchema),
     lastSeq: nonNegativeIntSchema,
   })
   .strict();
@@ -51,6 +66,7 @@ export const pushResponseSchema = z
 export const pullRequestSchema = z
   .object({
     userId: userIdSchema,
+    keyEpoch: keyEpochSchema,
     deviceId: deviceIdSchema,
     afterSeq: nonNegativeIntSchema,
     limit: z.number().int().positive().max(500),
@@ -87,7 +103,9 @@ export const bootstrapResponseSchema = z
     nodeId: nodeIdSchema,
     serverTime: isoDateTimeStringSchema,
     candidateUrls: z.array(syncNodeUrlSchema).min(1),
+    candidates: z.array(syncNodeCandidateSchema).min(1),
     defaultCandidateUrl: syncNodeUrlSchema,
+    realtime: bootstrapRealtimeConfigSchema,
   })
   .strict();
 
@@ -143,6 +161,7 @@ export type PullItem = z.infer<typeof pullItemSchema>;
 export type PullResponse = z.infer<typeof pullResponseSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type BootstrapResponse = z.infer<typeof bootstrapResponseSchema>;
+export type SyncNodeCandidate = z.infer<typeof syncNodeCandidateSchema>;
 export type CreatePairingSessionRequest = z.infer<typeof createPairingSessionRequestSchema>;
 export type CreatePairingSessionResponse = z.infer<typeof createPairingSessionResponseSchema>;
 export type ConsumePairingSessionRequest = z.infer<typeof consumePairingSessionRequestSchema>;

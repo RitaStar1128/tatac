@@ -6,38 +6,32 @@ function nextVersion(currentRecord: NoteRecord | null, op: NoteOp): number {
   return currentRecord ? currentRecord.version + 1 : Math.max(1, op.baseVersion + 1);
 }
 
-export function projectNoteRecord(currentRecord: NoteRecord | null, op: NoteOp): NoteRecord {
-  const version = nextVersion(currentRecord, op);
-
+export function projectNoteRecord(currentRecord: NoteRecord | null, op: NoteOp): NoteRecord | null {
   switch (op.payload.type) {
     case "note.create":
       return {
         id: op.noteId,
+        groupId: op.userId,
         title: op.payload.title || deriveNoteTitle(op.payload.body),
         body: op.payload.body,
         createdAt: op.payload.createdAt,
         updatedAt: op.payload.updatedAt,
         deletedAt: null,
-        version,
+        version: nextVersion(currentRecord, op),
         lastOpId: op.opId,
       };
 
     case "note.update": {
-      const baseRecord = currentRecord ?? {
-        id: op.noteId,
-        title: op.payload.title ?? "",
-        body: op.payload.body ?? "",
-        createdAt: op.wallClock,
-        updatedAt: op.payload.updatedAt,
-        deletedAt: null,
-        version: 0,
-        lastOpId: op.opId,
-      };
-      const nextBody = op.payload.body ?? baseRecord.body;
+      if (!currentRecord) {
+        return null;
+      }
+
+      const version = nextVersion(currentRecord, op);
+      const nextBody = op.payload.body ?? currentRecord.body;
       const nextTitle = op.payload.title ?? deriveNoteTitle(nextBody);
 
       return {
-        ...baseRecord,
+        ...currentRecord,
         title: nextTitle,
         body: nextBody,
         updatedAt: op.payload.updatedAt,
@@ -48,19 +42,14 @@ export function projectNoteRecord(currentRecord: NoteRecord | null, op: NoteOp):
     }
 
     case "note.delete": {
-      const baseRecord = currentRecord ?? {
-        id: op.noteId,
-        title: "",
-        body: "",
-        createdAt: op.wallClock,
-        updatedAt: op.payload.deletedAt,
-        deletedAt: null,
-        version: 0,
-        lastOpId: op.opId,
-      };
+      if (!currentRecord) {
+        return null;
+      }
+
+      const version = nextVersion(currentRecord, op);
 
       return {
-        ...baseRecord,
+        ...currentRecord,
         updatedAt: op.payload.deletedAt,
         deletedAt: op.payload.deletedAt,
         version,
