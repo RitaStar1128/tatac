@@ -7,6 +7,7 @@
     "dev": "vite --host",
     "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "build:sync-node": "esbuild sync-node/src/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist/sync-node",
+    "build:sync-node:pkg": "pnpm build:sync-node && pnpm dlx @yao-pkg/pkg dist/sync-node/index.js --targets node22-win-x64,node22-macos-arm64,node22-linux-x64 --output dist/sync-node/tatac-sync-node",
     "dev:sync-node": "tsx sync-node/src/index.ts",
     "start": "NODE_ENV=production node dist/index.js",
     "start:sync-node": "node dist/sync-node/index.js",

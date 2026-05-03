@@ -1,0 +1,13 @@
+[Unit]
+Description=tatac sync-node
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/tatac-sync-node
+Restart=on-failure
+RestartSec=5s
+Environment=SYNC_NODE_PORT=4010
+
+[Install]
+WantedBy=default.target

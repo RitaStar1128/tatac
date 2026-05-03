@@ -111,6 +111,55 @@ app.use(
     getBootstrapInfo: () => getBootstrapInfo(host, port),
   }),
 );
+
+app.get("/", (_request, response) => {
+  void store.health().then((health) => {
+    const uptimeSecs = Math.floor(process.uptime());
+    const hours = Math.floor(uptimeSecs / 3600);
+    const minutes = Math.floor((uptimeSecs % 3600) / 60);
+    const seconds = uptimeSecs % 60;
+    const uptime = `${hours}h ${minutes}m ${seconds}s`;
+    const bootstrap = getBootstrapInfo(host, port);
+
+    const candidateList = bootstrap.candidateUrls
+      .map((url) => `<li style="font-family:monospace">${url}</li>`)
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>tatac sync-node</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:480px;margin:40px auto;padding:0 20px;color:#111}
+  h1{font-size:1.1rem;font-weight:900;text-transform:uppercase;letter-spacing:.15em;margin:0 0 24px}
+  .row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #e5e5e5;font-size:.875rem}
+  .label{color:#666;font-size:.75rem;text-transform:uppercase;letter-spacing:.1em}
+  a{color:#111;font-weight:700}
+  ul{margin:8px 0 0;padding-left:20px;font-size:.875rem}
+</style>
+</head>
+<body>
+<h1>tatac sync-node &#9679; running</h1>
+<div class="row"><span class="label">Node ID</span><span style="font-family:monospace">${health.nodeId}</span></div>
+<div class="row"><span class="label">Uptime</span><span>${uptime}</span></div>
+<div class="row"><span class="label">Data file</span><span style="font-family:monospace;font-size:.75rem">${dataFile}</span></div>
+<div class="row" style="flex-direction:column;gap:4px">
+  <span class="label">Addresses</span>
+  <ul>${candidateList}</ul>
+</div>
+<div style="margin-top:24px">
+  <a href="http://127.0.0.1:3000">Open tatac &rarr;</a>
+</div>
+</body>
+</html>`;
+
+    response.setHeader("Content-Type", "text/html; charset=utf-8");
+    response.send(html);
+  });
+});
+
 app.listen(port, host, () => {
   const bootstrap = getBootstrapInfo(host, port);
   console.log(`Sync node listening on http://${host}:${port}`);

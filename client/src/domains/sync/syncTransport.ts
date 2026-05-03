@@ -26,6 +26,9 @@ import {
   type RegisterDeviceResponse,
 } from "@shared/contracts";
 
+export const SYNC_TIMEOUT_MS = 8000;
+export const HEALTH_TIMEOUT_MS = 5000;
+
 function buildApiUrl(syncNodeUrl: string, path: string): string {
   return new URL(path, syncNodeUrl.endsWith("/") ? syncNodeUrl : `${syncNodeUrl}/`).toString();
 }
@@ -49,6 +52,7 @@ async function postJson<TRequest, TResponse>(
   request: TRequest,
   requestValidator: { parse: (input: unknown) => TRequest },
   responseValidator: { parse: (input: unknown) => TResponse },
+  timeoutMs = SYNC_TIMEOUT_MS,
 ): Promise<TResponse> {
   const validatedRequest = requestValidator.parse(request);
   const response = await fetch(buildApiUrl(syncNodeUrl, path), {
@@ -57,6 +61,7 @@ async function postJson<TRequest, TResponse>(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(validatedRequest),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 
   if (!response.ok) {
@@ -70,8 +75,11 @@ async function getJson<TResponse>(
   syncNodeUrl: string,
   path: string,
   responseValidator: { parse: (input: unknown) => TResponse },
+  timeoutMs = SYNC_TIMEOUT_MS,
 ): Promise<TResponse> {
-  const response = await fetch(buildApiUrl(syncNodeUrl, path));
+  const response = await fetch(buildApiUrl(syncNodeUrl, path), {
+    signal: AbortSignal.timeout(timeoutMs),
+  });
   if (!response.ok) {
     return parseError(response);
   }
@@ -80,7 +88,7 @@ async function getJson<TResponse>(
 }
 
 export function fetchHealth(syncNodeUrl: string): Promise<HealthResponse> {
-  return getJson(syncNodeUrl, "/api/v1/health", healthResponseSchema);
+  return getJson(syncNodeUrl, "/api/v1/health", healthResponseSchema, HEALTH_TIMEOUT_MS);
 }
 
 export function fetchBootstrap(syncNodeUrl: string): Promise<BootstrapResponse> {

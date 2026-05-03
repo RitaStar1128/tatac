@@ -4,8 +4,9 @@ import { getSyncEnvironmentSupport } from "./syncEnvironment";
 import { getPersistedSyncSecret } from "./persistedSyncSecretStore";
 import { getOrCreateSyncConfig, subscribeToSyncConfig } from "./syncSettingsStore";
 import { syncWithNode, type SyncRunResult } from "./syncEngine";
+import { fetchHealth } from "./syncTransport";
 
-export type SyncUiStatus = "off" | "idle" | "syncing" | "error";
+export type SyncUiStatus = "off" | "idle" | "syncing" | "retrying" | "error";
 
 export interface SyncUiState {
   status: SyncUiStatus;
@@ -13,6 +14,25 @@ export interface SyncUiState {
   lastSyncedAt: string | null;
   lastError: string | null;
   lastRun: SyncRunResult | null;
+  retriesRemaining?: number;
+}
+
+const RETRY_BACKOFF_MS = [3000, 12000];
+const MAX_SYNC_ATTEMPTS = 3;
+const HEALTH_POLL_INTERVAL_MS = 30000;
+
+function addJitter(ms: number): number {
+  return ms * (0.8 + Math.random() * 0.4);
+}
+
+function isNonRetryableError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return (
+    message.includes("not configured") ||
+    message.includes("not enabled") ||
+    message.includes("Sync is not enabled") ||
+    message.includes("not ready")
+  );
 }
 
 const listeners = new Set<(state: SyncUiState) => void>();
@@ -71,6 +91,7 @@ class SyncScheduler {
   private saveDebounceTimer: number | null = null;
   private inFlight: Promise<void> | null = null;
   private rerunRequested = false;
+  private healthPollTimer: number | null = null;
 
   start(): void {
     if (this.started) {
@@ -113,6 +134,40 @@ class SyncScheduler {
     if (this.saveDebounceTimer !== null) {
       window.clearTimeout(this.saveDebounceTimer);
       this.saveDebounceTimer = null;
+    }
+    this.stopHealthPoll();
+  }
+
+  private startHealthPoll(): void {
+    this.stopHealthPoll();
+    this.healthPollTimer = window.setInterval(() => {
+      void this.checkHealth();
+    }, HEALTH_POLL_INTERVAL_MS);
+  }
+
+  private stopHealthPoll(): void {
+    if (this.healthPollTimer !== null) {
+      window.clearInterval(this.healthPollTimer);
+      this.healthPollTimer = null;
+    }
+  }
+
+  private async checkHealth(): Promise<void> {
+    const config = await getOrCreateSyncConfig();
+    if (!config.syncNodeUrl) {
+      return;
+    }
+    try {
+      await fetchHealth(config.syncNodeUrl);
+      this.stopHealthPoll();
+      setState((current) => ({
+        ...current,
+        status: "idle",
+        lastError: null,
+      }));
+      this.schedule("resume", 0);
+    } catch {
+      // still unreachable, continue polling
     }
   }
 
@@ -190,30 +245,50 @@ class SyncScheduler {
     }));
 
     this.inFlight = (async () => {
-      try {
-        const result = await syncWithNode();
-        setState((current) => ({
-          ...current,
-          enabled: true,
-          status: "idle",
-          lastSyncedAt: result.completedAt,
-          lastError: null,
-          lastRun: result,
-        }));
-      } catch (error) {
-        setState((current) => ({
-          ...current,
-          enabled: true,
-          status: "error",
-          lastError: getFriendlySyncError(error),
-        }));
-      } finally {
-        this.inFlight = null;
-        if (this.rerunRequested) {
-          this.rerunRequested = false;
-          this.schedule("memo-save", 0);
+      let lastError: unknown;
+
+      for (let attempt = 0; attempt < MAX_SYNC_ATTEMPTS; attempt++) {
+        try {
+          const result = await syncWithNode();
+          this.stopHealthPoll();
+          setState((current) => ({
+            ...current,
+            enabled: true,
+            status: "idle",
+            lastSyncedAt: result.completedAt,
+            lastError: null,
+            lastRun: result,
+            retriesRemaining: undefined,
+          }));
+          return;
+        } catch (error) {
+          lastError = error;
+
+          const isLastAttempt = attempt === MAX_SYNC_ATTEMPTS - 1;
+          if (isNonRetryableError(error) || isLastAttempt) {
+            break;
+          }
+
+          const backoffMs = RETRY_BACKOFF_MS[attempt] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1];
+          setState((current) => ({
+            ...current,
+            enabled: true,
+            status: "retrying",
+            lastError: null,
+            retriesRemaining: MAX_SYNC_ATTEMPTS - attempt - 1,
+          }));
+          await new Promise<void>((resolve) => setTimeout(resolve, addJitter(backoffMs)));
         }
       }
+
+      setState((current) => ({
+        ...current,
+        enabled: true,
+        status: "error",
+        lastError: getFriendlySyncError(lastError),
+        retriesRemaining: undefined,
+      }));
+      this.startHealthPoll();
     })();
 
     await this.inFlight;
