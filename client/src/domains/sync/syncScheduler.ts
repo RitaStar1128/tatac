@@ -1,5 +1,6 @@
 import { subscribeToLocalNoteOps } from "@/domains/notes/noteRepository";
 
+import { getSyncEnvironmentSupport } from "./syncEnvironment";
 import { getPersistedSyncSecret } from "./persistedSyncSecretStore";
 import { getOrCreateSyncConfig, subscribeToSyncConfig } from "./syncSettingsStore";
 import { syncWithNode, type SyncRunResult } from "./syncEngine";
@@ -47,6 +48,14 @@ async function resolveSyncAvailability(): Promise<{
   enabled: boolean;
   lastSyncedAt: string | null;
 }> {
+  const environment = getSyncEnvironmentSupport();
+  if (!environment.supported) {
+    return {
+      enabled: false,
+      lastSyncedAt: null,
+    };
+  }
+
   const [config, secret] = await Promise.all([getOrCreateSyncConfig(), getPersistedSyncSecret()]);
   return {
     enabled: Boolean(config.syncNodeUrl && secret?.groupSecret),

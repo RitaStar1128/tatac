@@ -2,6 +2,7 @@ import { Clock3, Smartphone } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 
 import { Button } from "@/components/ui/button";
+import { useLanguage } from "@/contexts/LanguageContext";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,24 @@ export function SyncPairingQrModal({
   pairingUrl,
   expiresAt,
 }: SyncPairingQrModalProps) {
+  const { language } = useLanguage();
+  const labels =
+    language === "ja"
+      ? {
+          title: "スマホを追加",
+          description: "同じ Wi-Fi で読み取ってください。スマホに同期設定をコピーして、最初の同期まで実行します。",
+          expires: "有効期限",
+          pairingUrl: "ペアリング URL",
+          close: "閉じる",
+        }
+      : {
+          title: "Add Phone",
+          description: "Scan this on the same Wi-Fi. The phone will copy the sync settings and run the first sync.",
+          expires: "Expires",
+          pairingUrl: "Pairing URL",
+          close: "Close",
+        };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -32,10 +51,10 @@ export function SyncPairingQrModal({
         <DialogHeader className="border-b-2 border-border px-6 py-5">
           <DialogTitle className="flex items-center gap-2 text-xl font-black uppercase tracking-tight">
             <Smartphone className="h-5 w-5" />
-            Add Phone
+            {labels.title}
           </DialogTitle>
           <DialogDescription className="mt-2 text-sm">
-            Scan this on the same Wi-Fi. The phone will copy the sync settings and run the first sync.
+            {labels.description}
           </DialogDescription>
         </DialogHeader>
 
@@ -48,12 +67,14 @@ export function SyncPairingQrModal({
 
           <div className="flex items-center gap-2 border border-border px-3 py-3 text-sm">
             <Clock3 className="h-4 w-4" />
-            <span>Expires: {new Date(expiresAt).toLocaleString()}</span>
+            <span>
+              {labels.expires}: {new Date(expiresAt).toLocaleString()}
+            </span>
           </div>
 
           <div className="space-y-2">
             <div className="text-xs font-bold uppercase tracking-[0.18em] text-muted-foreground">
-              Pairing URL
+              {labels.pairingUrl}
             </div>
             <div
               data-testid="pairing-url"
@@ -70,7 +91,7 @@ export function SyncPairingQrModal({
               onClick={() => onOpenChange(false)}
               className="rounded-none border-2 border-foreground font-bold uppercase tracking-[0.18em]"
             >
-              Close
+              {labels.close}
             </Button>
           </div>
         </div>

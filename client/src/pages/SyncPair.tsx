@@ -10,6 +10,7 @@ import {
   type PreparedPairingJoin,
   type PairingConsumeResult,
 } from "@/domains/sync/syncPairing";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { decodeBase64Url } from "@shared/lib/base64url";
 
 type PairingState =
@@ -31,7 +32,7 @@ type PairingState =
 
 const textDecoder = new TextDecoder();
 
-function parsePairingUrl(): { sessionId: string; syncNodeUrl: string; pairingKey: string } {
+function parsePairingUrl(labels: ReturnType<typeof useLabels>): { sessionId: string; syncNodeUrl: string; pairingKey: string } {
   const currentUrl = new URL(window.location.href);
   const sessionId = currentUrl.searchParams.get("sid")?.trim();
   const encodedNodeUrl = currentUrl.searchParams.get("node")?.trim();
@@ -40,7 +41,7 @@ function parsePairingUrl(): { sessionId: string; syncNodeUrl: string; pairingKey
   const pairingKey = fragmentParams.get("k")?.trim();
 
   if (!sessionId || !encodedNodeUrl || !pairingKey) {
-    throw new Error("This QR code is incomplete.");
+    throw new Error(labels.incompleteQr);
   }
 
   const syncNodeUrl = textDecoder.decode(decodeBase64Url(encodedNodeUrl));
@@ -51,34 +52,90 @@ function parsePairingUrl(): { sessionId: string; syncNodeUrl: string; pairingKey
   };
 }
 
-function toFriendlyError(error: unknown): Extract<PairingState, { status: "error" }> {
-  const message = error instanceof Error ? error.message : "Unable to complete sync setup.";
+function useLabels(language: "ja" | "en") {
+  return useMemo(
+    () =>
+      language === "ja"
+        ? {
+            incompleteQr: "この QR コードの情報が不足しています。",
+            unknownError: "同期設定を完了できませんでした。",
+            alreadyUsed: "この QR コードはすでに使用されています。PC で新しい QR コードを作成してください。",
+            expired: "この QR コードは期限切れです。PC で新しい QR コードを作成してください。",
+            nodeUnreachable: "同期ノードに接続できませんでした。同じ Wi-Fi に接続されているか確認してください。",
+            invalidQr: "この QR コードは TATAC の同期設定には使えません。",
+            actionOpenHistory: "履歴を開く",
+            actionBack: "戻る",
+            headerEyebrow: "TATAC 同期",
+            headerTitle: "スマホ接続",
+            resetting: "この端末のローカルメモを消去して、同期設定を完了しています...",
+            completing: "同期設定を完了して、メモを取り込んでいます...",
+            copiedFrom: (sourceDeviceName: string) => `${sourceDeviceName} から同期設定をコピーしました。`,
+            pulledApplied: (pulled: number, applied: number) =>
+              `${pulled} 件を受信し、${applied} 件を反映しました。`,
+            redirecting: "履歴へ移動しています...",
+            blockedTitle: "この端末にはすでにローカルメモがあります。",
+            blockedBody: (sourceDeviceName: string, noteCount: number, opCount: number) =>
+              `${sourceDeviceName} に参加するには、この端末の ${noteCount} 件のメモと ${opCount} 件のローカル変更を置き換える必要があります。`,
+            resetAndJoin: "ローカルデータを消して参加",
+            keepLocal: "この端末のメモを残す",
+          }
+        : {
+            incompleteQr: "This QR code is incomplete.",
+            unknownError: "Unable to complete sync setup.",
+            alreadyUsed: "This QR code has already been used. Generate a new one on the PC.",
+            expired: "This QR code has expired. Generate a new one on the PC.",
+            nodeUnreachable: "The phone could not reach the sync node. Make sure both devices are on the same Wi-Fi.",
+            invalidQr: "This QR code is not valid for TATAC sync setup.",
+            actionOpenHistory: "Open history",
+            actionBack: "Back",
+            headerEyebrow: "TATAC Sync",
+            headerTitle: "Phone Pairing",
+            resetting: "Clearing local notes and finishing sync setup...",
+            completing: "Completing sync setup and pulling notes...",
+            copiedFrom: (sourceDeviceName: string) => `Sync settings were copied from ${sourceDeviceName}.`,
+            pulledApplied: (pulled: number, applied: number) => `Received ${pulled} changes and applied ${applied}.`,
+            redirecting: "Redirecting to history...",
+            blockedTitle: "This device already has local notes.",
+            blockedBody: (sourceDeviceName: string, noteCount: number, opCount: number) =>
+              `Joining ${sourceDeviceName} would require replacing ${noteCount} notes and ${opCount} local changes on this device.`,
+            resetAndJoin: "Reset Local Data And Join",
+            keepLocal: "Keep Local Notes",
+          },
+    [language],
+  );
+}
+
+function toFriendlyError(
+  error: unknown,
+  labels: ReturnType<typeof useLabels>,
+): Extract<PairingState, { status: "error" }> {
+  const message = error instanceof Error ? error.message : labels.unknownError;
   if (message.includes("already been used")) {
     return {
       status: "error",
       reason: "already-used",
-      message: "This QR code has already been used. Generate a new one on the PC.",
+      message: labels.alreadyUsed,
     };
   }
   if (message.includes("expired")) {
     return {
       status: "error",
       reason: "expired",
-      message: "This QR code has expired. Generate a new one on the PC.",
+      message: labels.expired,
     };
   }
   if (message.includes("Failed to fetch")) {
     return {
       status: "error",
       reason: "node-unreachable",
-      message: "The phone could not reach the sync node. Make sure both devices are on the same Wi-Fi.",
+      message: labels.nodeUnreachable,
     };
   }
   if (message.includes("invalid") || message.includes("incomplete")) {
     return {
       status: "error",
       reason: "invalid",
-      message: "This QR code is not valid for TATAC sync setup.",
+      message: labels.invalidQr,
     };
   }
   return {
@@ -99,13 +156,15 @@ function toSuccessState(result: PairingConsumeResult): Extract<PairingState, { s
 
 export default function SyncPairPage() {
   const [, setLocation] = useLocation();
+  const { language } = useLanguage();
+  const labels = useLabels(language);
   const [state, setState] = useState<PairingState>({ status: "loading", resetting: false });
   const [preparedJoin, setPreparedJoin] = useState<PreparedPairingJoin | null>(null);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const redirectDelayMs = 2_000;
   const actionLabel = useMemo(
-    () => (state.status === "success" ? "Open history" : "Back"),
-    [state.status],
+    () => (state.status === "success" ? labels.actionOpenHistory : labels.actionBack),
+    [labels, state.status],
   );
 
   useEffect(() => {
@@ -113,7 +172,7 @@ export default function SyncPairPage() {
 
     const startPairing = async () => {
       try {
-        const params = parsePairingUrl();
+        const params = parsePairingUrl(labels);
         const prepared = await preparePairingJoinFromLink(params);
         if (cancelled) return;
 
@@ -141,11 +200,11 @@ export default function SyncPairPage() {
             return;
           }
 
-          setState(toFriendlyError(error));
+          setState(toFriendlyError(error, labels));
         }
       } catch (error) {
         if (cancelled) return;
-        setState(toFriendlyError(error));
+        setState(toFriendlyError(error, labels));
       }
     };
 
@@ -157,7 +216,7 @@ export default function SyncPairPage() {
         clearTimeout(redirectTimerRef.current);
       }
     };
-  }, [setLocation]);
+  }, [labels, setLocation]);
 
   const handleResetAndJoin = async () => {
     if (!preparedJoin) {
@@ -175,7 +234,7 @@ export default function SyncPairPage() {
         setLocation("/history");
       }, redirectDelayMs);
     } catch (error) {
-      setState(toFriendlyError(error));
+      setState(toFriendlyError(error, labels));
     }
   };
 
@@ -188,9 +247,9 @@ export default function SyncPairPage() {
           </span>
           <div>
             <div className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground">
-              TATAC Sync
+              {labels.headerEyebrow}
             </div>
-            <h1 className="text-2xl font-black uppercase tracking-tight">Phone Pairing</h1>
+            <h1 className="text-2xl font-black uppercase tracking-tight">{labels.headerTitle}</h1>
           </div>
         </div>
 
@@ -200,8 +259,8 @@ export default function SyncPairPage() {
               <LoaderCircle className="h-5 w-5 animate-spin" />
               <p className="text-sm">
                 {state.resetting
-                  ? "Clearing local notes and finishing sync setup..."
-                  : "Completing sync setup and pulling notes..."}
+                  ? labels.resetting
+                  : labels.completing}
               </p>
             </div>
           </div>
@@ -212,13 +271,13 @@ export default function SyncPairPage() {
             <div className="flex items-start gap-3 border border-border bg-muted/20 px-4 py-4">
               <CheckCircle2 className="mt-0.5 h-5 w-5" />
               <div className="text-sm">
-                <p>Sync settings were copied from {state.sourceDeviceName}.</p>
+                <p>{labels.copiedFrom(state.sourceDeviceName)}</p>
                 <p className="mt-1 text-muted-foreground">
-                  Received {state.pulled} changes and applied {state.applied}.
+                  {labels.pulledApplied(state.pulled, state.applied)}
                 </p>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Redirecting to history...</p>
+            <p className="text-xs text-muted-foreground">{labels.redirecting}</p>
           </div>
         )}
 
@@ -231,10 +290,13 @@ export default function SyncPairPage() {
             >
               <TriangleAlert className="mt-0.5 h-5 w-5 text-destructive" />
               <div className="space-y-2 text-sm">
-                <p>This device already has local notes.</p>
+                <p>{labels.blockedTitle}</p>
                 <p className="text-muted-foreground">
-                  Joining {state.sourceDeviceName} would require replacing {state.summary.noteCount} notes
-                  and {state.summary.opCount} local changes on this device.
+                  {labels.blockedBody(
+                    state.sourceDeviceName,
+                    state.summary.noteCount,
+                    state.summary.opCount,
+                  )}
                 </p>
               </div>
             </div>
@@ -247,7 +309,7 @@ export default function SyncPairPage() {
                 }}
                 className="rounded-none border-2 border-foreground bg-foreground font-bold uppercase tracking-[0.18em] text-background hover:bg-foreground/90"
               >
-                Reset Local Data And Join
+                {labels.resetAndJoin}
               </Button>
               <Button
                 type="button"
@@ -255,7 +317,7 @@ export default function SyncPairPage() {
                 onClick={() => setLocation("/sync-settings")}
                 className="rounded-none border-2 border-foreground font-bold uppercase tracking-[0.18em]"
               >
-                Keep Local Notes
+                {labels.keepLocal}
               </Button>
             </div>
           </div>

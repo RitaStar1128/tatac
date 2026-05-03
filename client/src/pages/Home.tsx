@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { History, RadioTower, Save, Settings, Smartphone } from "lucide-react";
 import { motion } from "framer-motion";
@@ -6,11 +6,19 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { DescriptionModal } from "@/components/DescriptionModal";
-import { PWAInstallPrompt, type PWAInstallPromptHandle } from "@/components/PWAInstallPrompt";
-import { SettingsModal } from "@/components/SettingsModal";
+import type { PWAInstallPromptHandle } from "@/components/PWAInstallPrompt";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { createNote, getNotesSnapshot } from "@/domains/notes/noteRepository";
+
+const DescriptionModal = lazy(() =>
+  import("@/components/DescriptionModal").then((module) => ({ default: module.DescriptionModal })),
+);
+const PWAInstallPrompt = lazy(() =>
+  import("@/components/PWAInstallPrompt").then((module) => ({ default: module.PWAInstallPrompt })),
+);
+const SettingsModal = lazy(() =>
+  import("@/components/SettingsModal").then((module) => ({ default: module.SettingsModal })),
+);
 
 export default function Home() {
   const [text, setText] = useState("");
@@ -296,21 +304,21 @@ export default function Home() {
         )}
       </main>
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        onOpenMobileQr={() => {
-          setIsSettingsOpen(false);
-          window.setTimeout(() => pwaPromptRef.current?.open(), 100);
-        }}
-      />
-
-      <DescriptionModal isOpen={isDescriptionOpen} onClose={closeDescription} />
-
-      <PWAInstallPrompt
-        ref={pwaPromptRef}
-        allowAutoPrompt={!isDescriptionOpen && !isFirstVisit && savedNoteCount > 0}
-      />
+      <Suspense fallback={null}>
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          onOpenMobileQr={() => {
+            setIsSettingsOpen(false);
+            window.setTimeout(() => pwaPromptRef.current?.open(), 100);
+          }}
+        />
+        <DescriptionModal isOpen={isDescriptionOpen} onClose={closeDescription} />
+        <PWAInstallPrompt
+          ref={pwaPromptRef}
+          allowAutoPrompt={!isDescriptionOpen && !isFirstVisit && savedNoteCount > 0}
+        />
+      </Suspense>
     </div>
   );
 }

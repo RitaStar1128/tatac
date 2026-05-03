@@ -4,6 +4,7 @@ import type { PairingBundlePayload, SyncNodeCandidate } from "@shared/contracts"
 import { clearLocalNotesAndOps, getLocalSyncDataSummary, type LocalSyncDataSummary } from "@/domains/notes/noteRepository";
 
 import { getOrCreateSyncConfig, replaceSyncGroupSettings, saveSyncSettingsDraft } from "./syncSettingsStore";
+import { assertSyncEnvironmentSupported } from "./syncEnvironment";
 import {
   clearPersistedSyncSecret,
   getPersistedSyncSecret,
@@ -94,6 +95,7 @@ function hasForeignLocalGroup(summary: LocalSyncDataSummary, targetGroupId: stri
 export async function enableSyncOnThisDevice(input?: {
   preferredBootstrapUrl?: string;
 }): Promise<EnableSyncResult> {
+  assertSyncEnvironmentSupported();
   const bootstrapTarget = input?.preferredBootstrapUrl?.trim() || DEFAULT_BOOTSTRAP_URL;
   const [config, bootstrap, persistedSecret] = await Promise.all([
     getOrCreateSyncConfig(),
@@ -128,6 +130,7 @@ export async function enableSyncOnThisDevice(input?: {
 export async function createPairingSessionForMobile(input?: {
   syncNodeUrlOverride?: string;
 }): Promise<PairingSessionResult> {
+  assertSyncEnvironmentSupported();
   const config = await getOrCreateSyncConfig();
   const selectedNodeUrl = input?.syncNodeUrlOverride?.trim() || config.syncNodeUrl;
   if (!selectedNodeUrl) {

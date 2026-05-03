@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   AnimatePresence,
   motion,
@@ -18,13 +18,16 @@ import {
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
-import { ExportModal } from "@/components/ExportModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/contexts/LanguageContext";
 import type { StoredNoteRecord } from "@/db/tatacDb";
 import { deleteNote, listActiveNotes, subscribeToNotesChanged } from "@/domains/notes/noteRepository";
 import { deriveNoteExcerpt } from "@/domains/notes/noteText";
+
+const ExportModal = lazy(() =>
+  import("@/components/ExportModal").then((module) => ({ default: module.ExportModal })),
+);
 
 function HistoryItem({
   record,
@@ -387,7 +390,9 @@ export default function HistoryPage() {
         </AnimatePresence>
       </main>
 
-      <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} records={records} />
+      <Suspense fallback={null}>
+        <ExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} records={records} />
+      </Suspense>
     </motion.div>
   );
 }

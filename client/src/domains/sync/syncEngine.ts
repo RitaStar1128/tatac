@@ -26,6 +26,7 @@ import {
   saveSyncSettingsDraft,
   updateSyncRegistration,
 } from "./syncSettingsStore";
+import { assertSyncEnvironmentSupported } from "./syncEnvironment";
 
 type ActiveSyncConfig = PersistedSyncConfig & {
   syncNodeUrl: string;
@@ -77,6 +78,7 @@ async function getActiveSyncContext(syncNodeUrlOverride?: string): Promise<{
 export async function checkSyncNodeHealth(
   syncNodeUrlOverride?: string,
 ): Promise<{ nodeId: string; serverTime: string }> {
+  assertSyncEnvironmentSupported();
   const config = await getActiveSyncConfig(syncNodeUrlOverride);
   const health = await fetchHealth(config.syncNodeUrl);
   return {
@@ -88,6 +90,7 @@ export async function checkSyncNodeHealth(
 export async function registerActiveDeviceWithNode(
   syncNodeUrlOverride?: string,
 ): Promise<{ config: ActiveSyncConfig; nodeId: string; registeredAt: string }> {
+  assertSyncEnvironmentSupported();
   const config = await getActiveSyncConfig(syncNodeUrlOverride);
   const registration = await registerDevice(config.syncNodeUrl, {
     userId: config.userId,
@@ -116,6 +119,7 @@ export async function pushSpecificNoteOpsToNode(
   accepted: number;
   acknowledgedOpIds: string[];
 }> {
+  assertSyncEnvironmentSupported();
   if (ops.length === 0) {
     return {
       attempted: 0,
@@ -173,6 +177,7 @@ export async function pushPendingNoteOpsToNode(): Promise<{ pushed: number; ackn
 export async function pullAndApplyFromNode(
   syncNodeUrlOverride?: string,
 ): Promise<{ pulled: number; applied: number; duplicates: number; cursor: number }> {
+  assertSyncEnvironmentSupported();
   const { config, passphrase } = await getActiveSyncContext(syncNodeUrlOverride);
   const cursor = await getSyncCursor(config.userId, config.keyEpoch, config.syncNodeUrl);
   let afterSeq = cursor.lastPulledSeq;
@@ -218,6 +223,7 @@ export async function pullAndApplyFromNode(
 }
 
 export async function syncWithNode(): Promise<SyncRunResult> {
+  assertSyncEnvironmentSupported();
   const config = await getActiveSyncConfig();
   const health = await fetchHealth(config.syncNodeUrl);
   await registerActiveDeviceWithNode();
