@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import {
   base64StringSchema,
-  bootstrapRealtimeConfigSchema,
   clientVersionSchema,
   deviceIdSchema,
   deviceNameSchema,
@@ -105,7 +104,6 @@ export const bootstrapResponseSchema = z
     candidateUrls: z.array(syncNodeUrlSchema).min(1),
     candidates: z.array(syncNodeCandidateSchema).min(1),
     defaultCandidateUrl: syncNodeUrlSchema,
-    realtime: bootstrapRealtimeConfigSchema,
   })
   .strict();
 

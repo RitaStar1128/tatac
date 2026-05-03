@@ -2,28 +2,24 @@
 
 ## Scope
 
-This document defines the current wire contract for:
+This document defines the relay-only sync contract for:
 
-- the LAN sync node
-- realtime signaling and presence
-- QR pairing bootstrap
-- the `.tatacsync` fallback file
+- bootstrap
+- device registration
+- encrypted push/pull
+- health
+- QR pairing sessions
+- `.tatacsync` fallback
 
-The sync model is local-first:
-
-- each device keeps the source of truth locally
-- the node stores opaque encrypted envelopes only
-- the node also routes opaque encrypted WebRTC signaling payloads
-- streams are partitioned by `userId + keyEpoch`
+The sync node stores opaque ciphertext only.
 
 ## Common Rules
 
-- `userId` is the sync group identifier exposed by the current API.
+- `userId` is the sync-group identifier in the current API.
 - `keyEpoch` is the active cryptographic epoch inside that group.
-- `deviceId` identifies a concrete client installation.
+- `deviceId` identifies one installed client.
 - request and response bodies are JSON.
-- timestamps use ISO-8601 UTC strings.
-- envelope ciphertext is opaque to the node.
+- timestamps are ISO-8601 UTC strings.
 
 ## Envelope Contract
 
@@ -43,58 +39,13 @@ The sync model is local-first:
 
 Notes:
 
-- `cipherText` is AES-GCM encrypted `NoteOp` JSON.
-- `aad` is authenticated metadata encoded as base64.
-- `contentHash` is a client-computed SHA-256 hash of the canonical plaintext op and is used for node-side dedupe.
-- `keyEpoch` is required in both transport metadata and decrypted payloads.
-
-## Bootstrap Candidate Contract
-
-```json
-{
-  "url": "http://192.168.0.10:4010",
-  "label": "Wi-Fi (192.168.0.10)",
-  "kind": "lan",
-  "address": "192.168.0.10",
-  "interfaceName": "Wi-Fi"
-}
-```
-
-Rules:
-
-- `kind` is one of `loopback`, `lan`, or `explicit`
-- the client may display all candidates and choose which one is embedded in the pairing QR
-- `defaultCandidateUrl` is only the suggested initial choice
-
-## Bootstrap Realtime Contract
-
-```json
-{
-  "signalingWebSocketUrl": "ws://192.168.0.10:4010/api/v1/realtime",
-  "iceServers": [
-    {
-      "urls": ["stun:stun.example.net:3478"]
-    },
-    {
-      "urls": ["turn:turn.example.net:3478?transport=udp"],
-      "username": "turn-user",
-      "credential": "turn-password",
-      "credentialType": "password"
-    }
-  ],
-  "expiresAt": "2026-05-01T11:00:00.000Z"
-}
-```
-
-Notes:
-
-- `signalingWebSocketUrl` is generated from the node origin that served `/bootstrap`
-- `iceServers` is the single source of truth for STUN/TURN config
-- `expiresAt` is optional and only present for refreshable TURN credentials
+- `cipherText` is AES-GCM encrypted `NoteOp`
+- `aad` is authenticated metadata
+- `contentHash` is used for node-side dedupe
 
 ## GET /api/v1/bootstrap
 
-Returns bootstrap metadata for PC-led onboarding.
+Returns the node URLs used for QR-based onboarding.
 
 Response:
 
@@ -122,45 +73,11 @@ Response:
       "interfaceName": "Wi-Fi"
     }
   ],
-  "defaultCandidateUrl": "http://192.168.0.10:4010",
-  "realtime": {
-    "signalingWebSocketUrl": "ws://127.0.0.1:4010/api/v1/realtime",
-    "iceServers": []
-  }
+  "defaultCandidateUrl": "http://192.168.0.10:4010"
 }
 ```
 
-## WebSocket /api/v1/realtime
-
-Used for:
-
-- presence registration
-- peer join/leave events
-- encrypted SDP/ICE signaling
-- relay hints when new envelopes land on the node
-
-Client -> node messages:
-
-- `presence.register`
-- `presence.leave`
-- `signal.forward`
-- `ping`
-
-Node -> client messages:
-
-- `presence.snapshot`
-- `peer.joined`
-- `peer.left`
-- `signal.deliver`
-- `relay.hint`
-- `pong`
-- `error`
-
-All signaling payloads remain opaque to the node. The node only validates the outer message shape and routes by `groupId + keyEpoch + deviceId`.
-
 ## POST /api/v1/register-device
-
-Registers or refreshes a device for one sync epoch.
 
 Request:
 
@@ -222,15 +139,9 @@ Response:
 }
 ```
 
-Behavior:
-
-- node-side dedupe is keyed by `contentHash`
-- repeated push of the same logical op does not append a second envelope
-- `acceptedContentHashes` is the authoritative acknowledgment set for the client
-
 ## POST /api/v1/pull
 
-Returns envelopes newer than the caller cursor for one epoch.
+Returns envelopes newer than the caller cursor.
 
 Request:
 
@@ -269,12 +180,6 @@ Response:
   "hasMore": false
 }
 ```
-
-Behavior:
-
-- `afterSeq` is exclusive
-- node cursor state is tracked per `deviceId + userId + keyEpoch`
-- old epochs are not returned when pulling the current epoch
 
 ## GET /api/v1/health
 
@@ -349,15 +254,9 @@ Response:
 }
 ```
 
-Behavior:
-
-- sessions are one-time use
-- expired sessions are cleanup candidates
-- node stores the bundle but not the plaintext pairing secret
-
 ## `.tatacsync` File
 
-Manual fallback is also scoped to `userId + keyEpoch`.
+Manual fallback remains scoped to `userId + keyEpoch`.
 
 ```json
 {
@@ -386,24 +285,14 @@ Manual fallback is also scoped to `userId + keyEpoch`.
 
 Import rules:
 
-- reject unsupported `fileType` or `version`
+- reject wrong `fileType` or `version`
 - reject mismatched `userId`
 - reject mismatched `keyEpoch`
 - reject mismatched `salt`
 - decrypt locally and dedupe by `opId`
 
-## Node Retention and Cleanup
+## Node Retention
 
-- pairing sessions are removed when expired
+- pairing sessions are cleaned up after expiry
 - duplicate envelopes are suppressed by `contentHash`
-- envelope streams are pruned per epoch after active devices advance beyond the retention window
-
-## Error Handling
-
-Current status codes:
-
-- `200`: request accepted
-- `400`: validation error
-- `404`: unknown route or cleaned-up pairing session
-- `409`: expired/already-used pairing session
-- `500`: unexpected node failure
+- envelope streams are retained per epoch and pruned after active devices advance beyond the retention window

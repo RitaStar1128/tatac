@@ -1,19 +1,21 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { ReloadPrompt } from "@/components/ReloadPrompt";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAppBootstrap } from "@/app/useAppBootstrap";
-import { useRealtimeSync } from "@/app/useRealtimeSync";
+import { useAutoSync } from "@/app/useAutoSync";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { LanguageProvider } from "./contexts/LanguageContext";
-import Home from "./pages/Home";
-import History from "./pages/History";
-import Edit from "./pages/Edit";
-import SyncSettingsPage from "./pages/SyncSettings";
-import ManualSyncPage from "./pages/ManualSync";
-import SyncPairPage from "./pages/SyncPair";
+
+const Home = lazy(() => import("./pages/Home"));
+const History = lazy(() => import("./pages/History"));
+const Edit = lazy(() => import("./pages/Edit"));
+const SyncSettingsPage = lazy(() => import("./pages/SyncSettings"));
+const ManualSyncPage = lazy(() => import("./pages/ManualSync"));
+const SyncPairPage = lazy(() => import("./pages/SyncPair"));
 
 function Router() {
   return (
@@ -51,7 +53,7 @@ function BootScreen({ error }: { error: Error | null }) {
 
 function App() {
   const bootstrap = useAppBootstrap();
-  useRealtimeSync(bootstrap.ready);
+  useAutoSync(bootstrap.ready);
   // Set document title for SEO (30-60 characters)
   if (typeof document !== 'undefined') {
     document.title = "TATAC - Reflex Input Memo App for Instant Thought Capture";
@@ -66,7 +68,9 @@ function App() {
             {bootstrap.ready ? (
               <>
                 <ReloadPrompt />
-                <Router />
+                <Suspense fallback={<BootScreen error={null} />}>
+                  <Router />
+                </Suspense>
               </>
             ) : (
               <BootScreen error={bootstrap.error} />

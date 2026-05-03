@@ -125,7 +125,7 @@ export class TatacDb extends Dexie {
         syncCursors: "&id, userId, keyEpoch, syncNodeUrl, lastPulledSeq, updatedAt",
       })
       .upgrade(async (tx) => {
-        const syncConfigTable = tx.table<PersistedSyncConfigRecord, "active">("syncConfig");
+        const syncConfigTable = tx.table<Record<string, unknown>, "active">("syncConfig");
         await syncConfigTable.toCollection().modify((config) => {
           if (!config.transportMode) {
             config.transportMode = "relay-only";
@@ -133,6 +133,23 @@ export class TatacDb extends Dexie {
           if (typeof config.lanSyncEnabled !== "boolean") {
             config.lanSyncEnabled = false;
           }
+        });
+      });
+
+    this.version(6)
+      .stores({
+        notes: "&id, groupId, [groupId+updatedAt], [groupId+deletedAt], updatedAt, deletedAt, version, lastOpId",
+        noteOps:
+          "&opId, noteId, userId, keyEpoch, deviceId, logicalTime, wallClock, origin, acknowledgedAt, [userId+noteId], [userId+keyEpoch+logicalTime], [userId+keyEpoch+noteId], [deviceId+logicalTime]",
+        syncConfig: "&id, userId, keyEpoch, syncNodeUrl, updatedAt",
+        syncSecrets: "&configId, persistedAt, origin",
+        syncCursors: "&id, userId, keyEpoch, syncNodeUrl, lastPulledSeq, updatedAt",
+      })
+      .upgrade(async (tx) => {
+        const syncConfigTable = tx.table<Record<string, unknown>, "active">("syncConfig");
+        await syncConfigTable.toCollection().modify((config) => {
+          delete config.transportMode;
+          delete config.lanSyncEnabled;
         });
       });
   }

@@ -113,8 +113,6 @@ export async function enableSyncOnThisDevice(input?: {
     keyEpoch: config.keyEpoch,
     deviceName: config.deviceName,
     syncNodeUrl: bootstrap.defaultCandidateUrl,
-    transportMode: "lan-direct",
-    lanSyncEnabled: true,
     salt: config.salt,
   });
 
@@ -223,8 +221,6 @@ export async function completePairingJoin(
     keyEpoch: prepared.payload.keyEpoch,
     deviceName: currentConfig.deviceName,
     syncNodeUrl: prepared.payload.syncNodeUrl,
-    transportMode: "lan-direct",
-    lanSyncEnabled: true,
     salt: prepared.payload.salt,
   });
   await savePersistedSyncSecret({

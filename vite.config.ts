@@ -16,6 +16,7 @@ const PROJECT_ROOT = import.meta.dirname;
 const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
 const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024; // 1MB per log file
 const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6); // Trim to 60% to avoid constant re-trimming
+const enablePwaDev = process.env.VITE_PWA_DEV === "true";
 
 type LogSource = "browserConsole" | "networkRequests" | "sessionReplay";
 
@@ -160,7 +161,7 @@ const plugins = [
   VitePWA({
     registerType: 'prompt',
     devOptions: {
-      enabled: true
+      enabled: enablePwaDev,
     },
     includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
     manifest: {
@@ -250,6 +251,44 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) {
+            return undefined;
+          }
+
+          if (
+            id.includes("/react/") ||
+            id.includes("\\react\\") ||
+            id.includes("react-dom") ||
+            id.includes("scheduler") ||
+            id.includes("wouter")
+          ) {
+            return "vendor-react";
+          }
+
+          if (
+            id.includes("framer-motion") ||
+            id.includes("lucide-react") ||
+            id.includes("@radix-ui")
+          ) {
+            return "vendor-ui";
+          }
+
+          if (
+            id.includes("sonner") ||
+            id.includes("qrcode.react") ||
+            id.includes("dexie") ||
+            id.includes("zod")
+          ) {
+            return "vendor-app";
+          }
+
+          return "vendor";
+        },
+      },
+    },
   },
   server: {
     port: 3000,

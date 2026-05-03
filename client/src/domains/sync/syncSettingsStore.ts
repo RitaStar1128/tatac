@@ -12,8 +12,6 @@ export interface SyncSettingsDraft {
   keyEpoch?: number;
   deviceName: string;
   syncNodeUrl: string | null;
-  transportMode?: PersistedSyncConfig["transportMode"];
-  lanSyncEnabled?: boolean;
   salt?: string;
 }
 
@@ -49,8 +47,6 @@ function createDefaultSyncConfig(): PersistedSyncConfig {
     deviceId,
     deviceName: guessDeviceName(),
     syncNodeUrl: null,
-    transportMode: "relay-only",
-    lanSyncEnabled: false,
     salt: createSaltBase64(),
     kdf: DEFAULT_SYNC_KDF_PARAMS,
     createdAt,
@@ -80,8 +76,6 @@ export async function saveSyncSettingsDraft(draft: SyncSettingsDraft): Promise<P
     keyEpoch: draft.keyEpoch ?? current.keyEpoch,
     deviceName: draft.deviceName.trim(),
     syncNodeUrl: normalizeSyncNodeUrl(draft.syncNodeUrl ?? ""),
-    transportMode: draft.transportMode ?? current.transportMode,
-    lanSyncEnabled: draft.lanSyncEnabled ?? current.lanSyncEnabled,
     salt: draft.salt?.trim() || current.salt,
     updatedAt: nowIso(),
   });
@@ -101,8 +95,6 @@ export async function replaceSyncGroupSettings(draft: SyncSettingsDraft): Promis
     keyEpoch: draft.keyEpoch ?? current.keyEpoch,
     deviceName: draft.deviceName.trim(),
     syncNodeUrl: normalizeSyncNodeUrl(draft.syncNodeUrl ?? ""),
-    transportMode: draft.transportMode ?? current.transportMode,
-    lanSyncEnabled: draft.lanSyncEnabled ?? current.lanSyncEnabled,
     salt: draft.salt?.trim() || current.salt,
     updatedAt: nowIso(),
     nodeId: undefined,
@@ -119,8 +111,6 @@ export async function startNextKeyEpoch(draft: {
   userId: string;
   deviceName: string;
   syncNodeUrl: string | null;
-  transportMode?: PersistedSyncConfig["transportMode"];
-  lanSyncEnabled?: boolean;
   salt: string;
 }): Promise<PersistedSyncConfig> {
   const current = await getOrCreateSyncConfig();
@@ -131,8 +121,6 @@ export async function startNextKeyEpoch(draft: {
     keyEpoch: current.keyEpoch + 1,
     deviceName: draft.deviceName.trim(),
     syncNodeUrl: normalizeSyncNodeUrl(draft.syncNodeUrl ?? ""),
-    transportMode: draft.transportMode ?? current.transportMode,
-    lanSyncEnabled: draft.lanSyncEnabled ?? current.lanSyncEnabled,
     salt: draft.salt.trim(),
     updatedAt: nowIso(),
     nodeId: undefined,
@@ -168,23 +156,6 @@ export async function markLastSuccessfulSync(): Promise<PersistedSyncConfig> {
     lastSuccessfulSyncAt: nowIso(),
     updatedAt: nowIso(),
   });
-  await tatacDb.syncConfig.put(updated);
-  notifySyncConfigListeners(updated);
-  return updated;
-}
-
-export async function saveSyncTransportPreference(input: {
-  lanSyncEnabled: boolean;
-  transportMode?: PersistedSyncConfig["transportMode"];
-}): Promise<PersistedSyncConfig> {
-  const current = await getOrCreateSyncConfig();
-  const updated = persistedSyncConfigSchema.parse({
-    ...current,
-    lanSyncEnabled: input.lanSyncEnabled,
-    transportMode: input.transportMode ?? (input.lanSyncEnabled ? "lan-direct" : "relay-only"),
-    updatedAt: nowIso(),
-  });
-
   await tatacDb.syncConfig.put(updated);
   notifySyncConfigListeners(updated);
   return updated;

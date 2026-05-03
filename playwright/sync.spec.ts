@@ -17,27 +17,19 @@ async function primeEnglish(page: import("@playwright/test").Page) {
 
 async function enableSyncOnPc(page: import("@playwright/test").Page) {
   await page.goto("/sync-settings");
-  await page.getByRole("button", { name: /enable sync on this pc/i }).click();
-  const addPhoneButton = page.getByRole("button", { name: /add phone/i });
+  await page.getByRole("button", { name: /enable sync/i }).click();
 
+  const addPhoneButton = page.getByRole("button", { name: /add phone/i });
   try {
     await expect(addPhoneButton).toBeVisible({ timeout: 5_000 });
     return;
   } catch {
-    const fallbackInput = page.getByLabel("sync-node-url").first();
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await expect(fallbackInput).toBeVisible({ timeout: 5_000 });
-      await fallbackInput.fill(syncNodeUrl);
-      await page.getByRole("button", { name: /enable with this url/i }).click();
-
-      try {
-        await expect(addPhoneButton).toBeVisible({ timeout: 5_000 });
-        return;
-      } catch {
-        // Retry the fallback path once more before failing the test.
-      }
-    }
+    const recoveryInput = page.getByLabel("sync-node-url");
+    await expect(recoveryInput).toBeVisible({ timeout: 5_000 });
+    await recoveryInput.fill(syncNodeUrl);
+    await page.getByRole("button", { name: /try this pc/i }).click();
   }
+
   await expect(addPhoneButton).toBeVisible({ timeout: 20_000 });
 }
 
@@ -46,12 +38,6 @@ async function openPairingUrl(page: import("@playwright/test").Page): Promise<st
   await page.getByRole("button", { name: /add phone/i }).click();
   await expect(page.getByTestId("pairing-url")).toBeVisible({ timeout: 10_000 });
   return (await page.getByTestId("pairing-url").textContent())?.trim() ?? "";
-}
-
-async function forceCatchUp(page: import("@playwright/test").Page) {
-  await page.goto("/sync-settings");
-  await page.getByRole("button", { name: /force catch-up/i }).click();
-  await expect(page.getByText(/latest catch-up/i)).toBeVisible({ timeout: 20_000 });
 }
 
 async function createNote(page: import("@playwright/test").Page, value: string) {
@@ -70,27 +56,17 @@ async function updateNote(page: import("@playwright/test").Page, updatedValue: s
   await expect(page.locator('[data-note-title="Alpha note"]').first()).toBeVisible();
 }
 
-async function deleteNoteBySwipe(page: import("@playwright/test").Page) {
+async function deleteNote(page: import("@playwright/test").Page) {
   await page.goto("/history");
-  const card = page.locator('[data-note-title="Alpha note"]').first();
-  await expect(card).toBeVisible();
-  const box = await card.boundingBox();
-  if (!box) {
-    throw new Error("History note card bounding box was not available.");
-  }
-
-  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.1, box.y + box.height / 2, { steps: 20 });
-  await page.mouse.up();
-  await expect(card).toHaveCount(0, { timeout: 10_000 });
+  await page.getByRole("button", { name: /delete this note/i }).first().click();
+  await expect(page.locator('[data-note-title="Alpha note"]')).toHaveCount(0, { timeout: 10_000 });
 }
 
 test.beforeEach(async () => {
   await rm(syncNodeDataFile, { force: true });
 });
 
-test("pairs a phone with a one-time QR link and live-syncs create/update/delete while both apps stay open", async ({ browser }) => {
+test("pairs a phone with a one-time QR link and syncs through relay on reopen/resume", async ({ browser }) => {
   const deviceOne = await browser.newContext();
   const deviceTwo = await browser.newContext();
   const pageOne = await deviceOne.newPage();
@@ -107,13 +83,15 @@ test("pairs a phone with a one-time QR link and live-syncs create/update/delete 
   await pageTwo.waitForURL("**/history", { timeout: 20_000 });
 
   await createNote(pageOne, "Alpha note\nCreated on device one");
-  await expect(pageTwo.locator('[data-note-title="Alpha note"]').first()).toBeVisible();
+  await pageTwo.goto("/history");
+  await expect(pageTwo.locator('[data-note-title="Alpha note"]').first()).toBeVisible({ timeout: 20_000 });
 
   await updateNote(pageTwo, "Alpha note\nUpdated on device two");
   await pageOne.goto("/history");
   await expect(pageOne.getByText("Updated on device two")).toBeVisible({ timeout: 20_000 });
 
-  await deleteNoteBySwipe(pageTwo);
+  await deleteNote(pageTwo);
+  await pageOne.goto("/history");
   await expect(pageOne.getByText("Alpha note")).toHaveCount(0, { timeout: 20_000 });
 
   const deviceThree = await browser.newContext();
@@ -127,7 +105,7 @@ test("pairs a phone with a one-time QR link and live-syncs create/update/delete 
   await deviceTwo.close();
 });
 
-test("catches up from relay when a paired device comes back online", async ({ browser }) => {
+test("catches up from relay when a paired device comes back later", async ({ browser }) => {
   const pc = await browser.newContext();
   const phone = await browser.newContext();
   const pageOne = await pc.newPage();
@@ -145,6 +123,7 @@ test("catches up from relay when a paired device comes back online", async ({ br
   await createNote(pageOne, "Relay catch-up note\nCreated while phone was away");
 
   const pageTwoReturn = await phone.newPage();
+  await primeEnglish(pageTwoReturn);
   await pageTwoReturn.goto("/history");
   await expect(pageTwoReturn.locator('[data-note-title="Relay catch-up note"]').first()).toBeVisible({
     timeout: 20_000,
@@ -165,7 +144,6 @@ test("blocks pairing on a non-empty device until the user resets local data", as
 
   await enableSyncOnPc(pageOne);
   await createNote(pageOne, "Remote note\nCreated on the PC");
-  await forceCatchUp(pageOne);
 
   await createNote(pageTwo, "Local only note\nShould be cleared before join");
   const pairingUrl = await openPairingUrl(pageOne);
@@ -203,7 +181,7 @@ test("shows a node unreachable error when the pairing node cannot be reached", a
   await phone.close();
 });
 
-test("exports and imports a .tatacsync file after QR pairing", async ({ browser }) => {
+test("keeps .tatacsync fallback working behind the recovery flow", async ({ browser }) => {
   const deviceOne = await browser.newContext();
   const deviceTwo = await browser.newContext();
   const pageOne = await deviceOne.newPage();

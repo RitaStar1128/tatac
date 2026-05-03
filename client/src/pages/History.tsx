@@ -11,7 +11,6 @@ import {
   Copy,
   Download,
   Edit2,
-  RefreshCw,
   Search,
   Trash2,
   X,
@@ -200,7 +199,6 @@ export default function HistoryPage() {
           emptyBody: "思いついたことを1つだけ書き残すところから始めてください。",
           emptyCta: "メモを書く",
           backAria: "ホームに戻る",
-          manualSyncAria: "手動同期を開く",
           exportAria: "書き出しを開く",
           copyAria: "本文をコピー",
           editAria: "このメモを編集",
@@ -214,7 +212,6 @@ export default function HistoryPage() {
           emptyBody: "Start with one quick thought. You can organize it later.",
           emptyCta: "Write a note",
           backAria: "Back to home",
-          manualSyncAria: "Open manual sync",
           exportAria: "Open export",
           copyAria: "Copy note body",
           editAria: "Edit this note",
@@ -301,17 +298,6 @@ export default function HistoryPage() {
         </div>
 
         <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setLocation("/manual-sync")}
-            aria-label={copy.manualSyncAria}
-            title={copy.manualSyncAria}
-            className="rounded-none hover:bg-muted transition-colors"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </Button>
-
           {records.length > 0 && (
             <Button
               variant="ghost"

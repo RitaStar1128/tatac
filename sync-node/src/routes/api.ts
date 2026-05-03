@@ -24,7 +24,6 @@ import {
   FileBackedSyncNodeStore,
   PairingSessionStoreError,
 } from "../services/fileStore";
-import type { RealtimeHub } from "../realtime/realtimeHub";
 
 function validationError(message: string) {
   return apiErrorSchema.parse({
@@ -77,34 +76,11 @@ export interface BootstrapInfo {
   candidateUrls: string[];
   candidates: SyncNodeCandidate[];
   defaultCandidateUrl: string;
-  iceServers: Array<{
-    urls: string | string[];
-    username?: string;
-    credential?: string;
-    credentialType?: "password";
-  }>;
-  realtimeExpiresAt?: string;
-}
-
-function resolveSignalingWebSocketUrl(request: {
-  protocol: string;
-  get: (name: string) => string | undefined;
-}): string {
-  const forwardedProto = request.get("x-forwarded-proto");
-  const protocol = forwardedProto ?? request.protocol;
-  const wsProtocol = protocol === "https" ? "wss" : "ws";
-  const host = request.get("host");
-  if (!host) {
-    throw new Error("Unable to resolve realtime WebSocket host.");
-  }
-
-  return `${wsProtocol}://${host}/api/v1/realtime`;
 }
 
 export function createApiRouter(
   store: FileBackedSyncNodeStore,
   options: { getBootstrapInfo: () => BootstrapInfo },
-  realtimeHub?: RealtimeHub,
 ): Router {
   const router = Router();
 
@@ -119,10 +95,9 @@ export function createApiRouter(
     );
   });
 
-  router.get("/bootstrap", async (request, response) => {
+  router.get("/bootstrap", async (_request, response) => {
     const result = await store.health();
     const bootstrap = options.getBootstrapInfo();
-    const signalingWebSocketUrl = resolveSignalingWebSocketUrl(request);
 
     response.json(
       bootstrapResponseSchema.parse({
@@ -132,11 +107,6 @@ export function createApiRouter(
         candidateUrls: bootstrap.candidateUrls,
         candidates: bootstrap.candidates,
         defaultCandidateUrl: bootstrap.defaultCandidateUrl,
-        realtime: {
-          signalingWebSocketUrl,
-          iceServers: bootstrap.iceServers,
-          expiresAt: bootstrap.realtimeExpiresAt,
-        },
       }),
     );
   });
@@ -161,9 +131,6 @@ export function createApiRouter(
     try {
       const body = pushRequestSchema.parse(request.body);
       const result = await store.push(body.userId, body.keyEpoch, body.deviceId, body.envelopes);
-      if (result.acceptedContentHashes.length > 0) {
-        realtimeHub?.notifyRelayHint(body.userId, body.keyEpoch, body.deviceId);
-      }
       response.json(
         pushResponseSchema.parse({
           ok: true,

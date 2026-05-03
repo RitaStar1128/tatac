@@ -2,8 +2,7 @@ import express from "express";
 import os from "node:os";
 import path from "node:path";
 
-import type { RtcIceServer, SyncNodeCandidate } from "../../shared/contracts";
-import { attachRealtimeServer, RealtimeHub } from "./realtime/realtimeHub";
+import type { SyncNodeCandidate } from "../../shared/contracts";
 import { createApiRouter, type BootstrapInfo } from "./routes/api";
 import { FileBackedSyncNodeStore } from "./services/fileStore";
 
@@ -81,28 +80,7 @@ function getBootstrapInfo(host: string, port: number): BootstrapInfo {
     candidates,
     candidateUrls: candidates.map((candidate) => candidate.url),
     defaultCandidateUrl: candidates[0].url,
-    iceServers: resolveIceServers(),
-    realtimeExpiresAt: process.env.SYNC_NODE_ICE_SERVERS_EXPIRES_AT,
   };
-}
-
-function resolveIceServers(): RtcIceServer[] {
-  const raw = process.env.SYNC_NODE_ICE_SERVERS_JSON?.trim();
-  if (!raw) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      throw new Error("SYNC_NODE_ICE_SERVERS_JSON must be an array.");
-    }
-
-    return parsed as RtcIceServer[];
-  } catch (error) {
-    console.error("Failed to parse SYNC_NODE_ICE_SERVERS_JSON");
-    throw error;
-  }
 }
 
 const app = express();
@@ -114,7 +92,6 @@ const store = new FileBackedSyncNodeStore({
   filePath: dataFile,
   nodeId: process.env.SYNC_NODE_ID ?? createNodeId(),
 });
-const realtimeHub = new RealtimeHub();
 
 app.use((request, response, next) => {
   response.header("Access-Control-Allow-Origin", "*");
@@ -132,12 +109,11 @@ app.use(
   "/api/v1",
   createApiRouter(store, {
     getBootstrapInfo: () => getBootstrapInfo(host, port),
-  }, realtimeHub),
+  }),
 );
-const server = app.listen(port, host, () => {
+app.listen(port, host, () => {
   const bootstrap = getBootstrapInfo(host, port);
   console.log(`Sync node listening on http://${host}:${port}`);
   console.log(`Sync node data file: ${dataFile}`);
   console.log(`Sync node bootstrap candidates: ${bootstrap.candidateUrls.join(", ")}`);
 });
-attachRealtimeServer(server, realtimeHub);

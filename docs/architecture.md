@@ -1,304 +1,133 @@
 # TATAC Sync Architecture
 
-## Scope
+## Goal
 
-This document defines the next stable architecture for TATAC sync after the first QR-pairing MVP.
+Sync exists to support the real product goal:
 
-It has two goals:
+- write a memo immediately
+- find, edit, copy, and delete it later
+- continue the same memo flow on PC and phone
 
-- preserve the local-first model already implemented
-- close the design holes discovered in group switching, key rotation, pairing reachability, LAN URL selection, node retention, and live LAN sync
+Everything in this document is optimized for that simplicity.
 
-This document is normative for the next sync revision. Where current implementation differs, the behavior described here should be treated as the target.
+## Core Model
 
-## Core Principles
+- Source of truth is always each device's local IndexedDB.
+- The sync node is not authoritative state. It is an untrusted encrypted relay.
+- The normal setup flow is:
+  1. PC: `Enable Sync`
+  2. phone: `Scan QR`
+  3. app auto-syncs on open, resume, and save
+- Users do not need to enter `groupId`, `keyEpoch`, `salt`, `passphrase`, or node URLs in the happy path.
 
-- Local-first: each device keeps the source of truth in its local IndexedDB.
-- Untrusted relay node: the sync node stores opaque encrypted envelopes and pairing session metadata only.
-- LAN direct by opt-in: `LAN Sync` keeps a live WebRTC mesh only while the app is visible.
-- Relay fallback: the sync node remains the durable mailbox and fallback path when direct delivery is unavailable.
-- PC-led onboarding: a PC enables sync, then phones join via one-time QR pairing.
-- Deterministic note policy: note-level LWW with tombstones; delete wins over update.
-- Group isolation: notes, oplog, cursors, and sync transport must all be scoped consistently to the same sync group and key epoch.
+## Transport
 
-## System Model
+TATAC now uses one sync path only:
 
-### 1. PWA Client
+- client encrypts `NoteOp`
+- client sends encrypted envelopes to the sync node with `push`
+- client reads encrypted envelopes from the sync node with `pull`
+- client decrypts and applies them locally
 
-Responsibilities:
+Removed from the architecture:
 
-- store notes, oplog, sync config, sync secrets, and pull cursors locally
-- materialize `NoteRecord` state from `NoteOp`
-- derive sync keys client-side
-- encrypt and decrypt sync envelopes
-- derive a separate signaling key client-side
-- maintain WebRTC peer connections while the app is visible
-- create and consume one-time QR pairing sessions
-- export and import `.tatacsync` bundles
+- WebRTC
+- signaling sockets
+- peer mesh
+- TURN/STUN
+- realtime presence
+- direct-vs-relay transport modes
 
-Non-responsibilities:
+This keeps one durable and debuggable path.
 
-- no plaintext sharing with the node
-- no implicit migration when switching groups or keys
+## Local Data
 
-### 2. Sync Node
+The client stores:
 
-Responsibilities:
+- `notes`: materialized `NoteRecord`
+- `noteOps`: append-only oplog
+- `syncConfig`: active group/device/node metadata
+- `syncSecrets`: persisted group secret for the active sync group
+- `syncCursors`: pull cursor per `userId + keyEpoch + syncNodeUrl`
+
+Rules:
+
+- local DB remains usable without the node
+- UI reads notes only from the active sync group
+- deletes are tombstones
+- note conflicts remain note-level LWW with delete priority
+
+## Sync Group and Safety
+
+- `userId` is the sync-group identifier in the current wire contract
+- `keyEpoch` separates cryptographic epochs inside that group
+- QR join is blocked on non-empty foreign devices unless the user explicitly resets local data
+- update/delete without an existing note stays rejected
+
+This preserves group isolation and prevents silent local data loss.
+
+## Automatic Sync Behavior
+
+Auto-sync runs only at these times:
+
+- app startup
+- app foreground resume
+- shortly after a local save generates a new oplog entry
+
+Rules:
+
+- memo save never waits for sync
+- local save succeeds first
+- sync happens in the background
+- if sync fails, the note stays local and the UI shows a simple error state
+- manual `Sync now` remains available as retry/catch-up
+
+## Node Responsibilities
+
+The sync node does only this:
 
 - register devices
-- return bootstrap metadata for reachable LAN URLs
-- store opaque envelopes partitioned by `groupId + keyEpoch`
-- store one-time pairing sessions with TTL and consume state
-- route encrypted WebRTC signaling and realtime presence
-- expose health and pairing endpoints
+- expose bootstrap metadata
+- store encrypted envelopes per `userId + keyEpoch`
+- return envelopes by cursor
+- store and consume one-time QR pairing sessions
+- expose health
 
-Non-responsibilities:
+The node does not:
 
-- no plaintext note access
-- no note merge logic
-- no authoritative note state
+- read plaintext notes
+- merge notes
+- maintain authoritative note state
 
-### 3. Manual Sync File
+## QR Pairing
 
-`.tatacsync` remains the degraded-network fallback.
+Pairing stays PC-led:
 
-- export writes encrypted envelopes plus sync metadata
-- import decrypts locally and applies the same dedupe/conflict rules as node pull
-- the file format must be scoped to `groupId + keyEpoch`
+1. PC enables sync
+2. PC generates group secret if needed
+3. PC creates a short-lived one-time pairing session
+4. phone opens `/sync-pair`
+5. phone consumes the session, stores settings locally, and performs initial sync
 
-## Realtime Transport
+The pairing URL prefers the current app origin so LAN-only environments still work.
 
-When `LAN Sync` is enabled and the app is visible:
+## Recovery
 
-- the client connects to `/api/v1/realtime`
-- the node tracks visible peers by `groupId + keyEpoch`
-- peers build a full WebRTC mesh
-- encrypted note envelopes are broadcast over a reliable ordered data channel
-- the same envelopes are still pushed to the relay node for durability
+Recovery exists, but it is not part of the normal flow.
 
-When the app becomes hidden:
+- `.tatacsync` remains as the last-resort fallback
+- manual node URL entry is hidden behind failure-only recovery UI
+- cryptographic maintenance such as key rotation may remain internal, but is not exposed in the standard product flow
 
-- signaling and peer connections are closed
-- live direct sync stops
-- relay catch-up remains available
+## UX Contract
 
-## Revised Domain Model
+Normal users should only need to understand:
 
-### Group and Key Concepts
+- `Sync is off`
+- `Sync is on`
+- `Last synced`
+- `Add phone`
+- `Sync now`
+- `Could not sync`
 
-The original MVP overloaded `userId` as both user-facing identity and sync grouping key. That is no longer sufficient.
-
-This revision uses:
-
-- `groupId`: stable logical sync group identifier
-- `keyEpoch`: monotonic identifier for the active cryptographic epoch inside a group
-- `deviceId`: concrete client installation identifier
-
-Rules:
-
-- `groupId` changes only when joining or creating a different sync group
-- `keyEpoch` changes when `passphrase` or `salt` changes
-- envelopes, cursors, export/import bundles, and node buckets must all be scoped to the same `groupId + keyEpoch`
-
-### NoteRecord
-
-Canonical materialized note state stored in IndexedDB.
-
-- `id`
-- `groupId`
-- `title`
-- `body`
-- `createdAt`
-- `updatedAt`
-- `deletedAt | null`
-- `version`
-- `lastOpId`
-
-`NoteRecord` must be scoped to a sync group so the UI never mixes notes from different groups.
-
-### NoteOp
-
-Append-only operation record stored locally and exchanged through encrypted envelopes.
-
-- `opId`
-- `deviceId`
-- `groupId`
-- `keyEpoch`
-- `noteId`
-- `baseVersion`
-- `logicalTime`
-- `wallClock`
-- `payload`
-
-Payload variants:
-
-- `note.create`
-- `note.update`
-- `note.delete`
-
-### EncryptedEnvelope
-
-Opaque transport unit stored by the node and exported into `.tatacsync`.
-
-- `envelopeVersion`
-- `senderDeviceId`
-- `recipientGroupId`
-- `keyEpoch`
-- `contentHash`
-- `nonce`
-- `cipherText`
-- `aad`
-- `createdAt`
-
-The encrypted body contains a serialized `NoteOp`. `contentHash` exists to support node-side dedupe without plaintext access.
-
-## IndexedDB Layout
-
-The client schema must support group and epoch isolation.
-
-- `notes`: materialized note state, indexed by `groupId`
-- `noteOps`: append-only operation log, indexed by `groupId`, `keyEpoch`, and device logical time
-- `syncConfig`: active group selection, node URL, and device metadata
-- `syncSecrets`: persisted sync secret for the active group
-- `syncCursors`: pull cursor state per `groupId + keyEpoch + syncNodeUrl`
-
-Notes:
-
-- persisted sync secrets remain a UX-over-security tradeoff and are not equivalent to secure enclave storage
-- local UI queries must always read notes from the active `groupId`
-
-## Onboarding and Join Rules
-
-### Create Group on PC
-
-The default onboarding remains:
-
-1. user opens Sync on a PC
-2. app tries `http://127.0.0.1:4010`
-3. if bootstrap succeeds, the app creates or reuses a local `groupId`
-4. the app creates a local sync secret and stores it on the PC
-5. the app stores the selected sync node URL for the group
-
-### Join Group on Another Device
-
-Joining an existing group is allowed only when the target device is empty for sync purposes.
-
-Join precondition:
-
-- no existing local notes for any other group, or
-- the user explicitly chooses a destructive migration path
-
-If the device already contains notes or oplog entries from another group, the app must not silently overwrite `groupId` or `salt`.
-
-Allowed outcomes:
-
-- `join`: only for empty devices
-- `reset and join`: destructive local reset, then join
-- `export then join`: user exports local data first, then resets and joins
-- `cancel`
-
-Silent group rebinding is forbidden.
-
-## Conflict and Projection Rules
-
-The conflict policy remains note-level LWW with delete priority, but projection rules are tightened.
-
-Tie-break order:
-
-1. `deletedAt` / `updatedAt`
-2. `logicalTime`
-3. `opId`
-
-Rules:
-
-- duplicate `opId` is ignored
-- duplicate create on an already-materialized note is ignored
-- delete beats update when they conflict
-- tombstones remain materialized in this revision
-- update without an existing base note is rejected
-- delete without an existing base note is rejected
-
-This removes the earlier implicit behavior where remote update/delete could synthesize a note without a corresponding create.
-
-## Key Rotation Rules
-
-Changing `passphrase` or `salt` is treated as a key rotation, not as an in-place edit of the current group.
-
-Rules:
-
-- key rotation creates a new `keyEpoch`
-- node streams are isolated by `groupId + keyEpoch`
-- pull cursors are isolated by `groupId + keyEpoch`
-- export/import files are isolated by `groupId + keyEpoch`
-- the client must not attempt to decrypt older-epoch envelopes with the new secret
-
-This avoids the current failure mode where old ciphertext remains in the same node bucket and breaks future pulls.
-
-## Pairing and Reachability Rules
-
-### Pairing URL Origin
-
-The pairing page must prefer the current app origin.
-
-Order:
-
-1. current app origin
-2. explicitly configured public app origin
-3. public hosted fallback
-
-The architecture must not require internet access when the app and sync node are both reachable on the same LAN.
-
-### LAN Candidate Selection
-
-Bootstrap returns a list of candidate LAN URLs. The client must not blindly trust the first item.
-
-Rules:
-
-- the PC UI must show candidate node URLs
-- the user can choose which URL to embed into the pairing QR
-- the chosen URL is stored as the active sync node URL for the group
-
-This is required for multi-NIC, VPN, Docker, and virtual adapter environments.
-
-## Node Retention and Dedupe
-
-The node remains an opaque relay, but it still needs bounded storage behavior.
-
-### Pairing Sessions
-
-- stored with TTL
-- one-time consume
-- expired sessions are cleanup candidates even if never consumed
-
-### Envelopes
-
-- envelopes are partitioned by `groupId + keyEpoch`
-- node may dedupe by `contentHash`
-- retention must be bounded
-
-Minimum retention policy for this revision:
-
-- track per-device pull/ack watermark, or
-- keep only a bounded trailing window after all known devices have advanced past it
-
-Unbounded append-only storage is not acceptable beyond the first prototype.
-
-## Security Notes
-
-- plaintext notes remain client-only
-- persisted sync secrets are allowed for UX but are not strong secure storage
-- pairing keys remain one-time, short-lived, and fragment-scoped in the QR URL
-- the node sees device metadata, group identifiers, timestamps, and ciphertext metadata, but not plaintext notes
-- PBKDF2 remains acceptable for portability in this revision; Argon2id can still be evaluated later
-
-## Required Implementation Themes
-
-This architecture implies five implementation themes:
-
-1. enforce safe group-join rules and group-scoped notes
-2. introduce `keyEpoch` across contracts, storage, and transport
-3. make pairing origin LAN-safe and deployment-safe
-4. expose and select LAN candidate URLs explicitly
-5. add node-side retention and dedupe behavior
-
-The issue-level breakdown for these themes lives in `docs/sync-redesign-issues.md`.
+Any deeper concepts are implementation details and should stay out of the main UI.

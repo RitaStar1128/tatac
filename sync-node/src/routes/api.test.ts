@@ -5,10 +5,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AddressInfo } from "node:net";
-import WebSocket from "ws";
 
 import { createApiRouter } from "./api";
-import { attachRealtimeServer, RealtimeHub } from "../realtime/realtimeHub";
 import { FileBackedSyncNodeStore } from "../services/fileStore";
 import { decodeBase64Url, encodeBase64Url } from "../../../shared/lib/base64url";
 
@@ -68,7 +66,6 @@ describe("sync-node api", () => {
       retentionWindow: options?.retentionWindow,
     });
     const app = express();
-    const realtimeHub = new RealtimeHub();
     app.use(express.json());
     app.use(
       "/api/v1",
@@ -91,45 +88,19 @@ describe("sync-node api", () => {
             },
           ],
           defaultCandidateUrl: "http://192.168.0.10:4110",
-          iceServers: [],
         }),
-      }, realtimeHub),
+      }),
     );
 
     const server = app.listen(0);
-    attachRealtimeServer(server, realtimeHub);
     servers.push(server);
     const port = (server.address() as AddressInfo).port;
     const baseUrl = `http://127.0.0.1:${port}/api/v1`;
-    const realtimeUrl = `ws://127.0.0.1:${port}/api/v1/realtime`;
 
     return {
       baseUrl,
-      realtimeUrl,
       store,
     };
-  }
-
-  async function openRealtimeSocket(realtimeUrl: string): Promise<WebSocket> {
-    const socket = new WebSocket(realtimeUrl);
-    await new Promise<void>((resolve, reject) => {
-      socket.once("open", () => resolve());
-      socket.once("error", reject);
-    });
-    return socket;
-  }
-
-  async function receiveRealtimeMessage(socket: WebSocket): Promise<Record<string, unknown>> {
-    return new Promise((resolve, reject) => {
-      socket.once("message", (raw) => {
-        try {
-          resolve(JSON.parse(raw.toString("utf8")) as Record<string, unknown>);
-        } catch (error) {
-          reject(error);
-        }
-      });
-      socket.once("error", reject);
-    });
   }
 
   async function register(baseUrl: string, deviceId: string, keyEpoch = 1) {
@@ -193,7 +164,7 @@ describe("sync-node api", () => {
     expect(pullResponse.hasMore).toBe(false);
   });
 
-  it("returns bootstrap candidates with metadata", async () => {
+  it("returns bootstrap candidates without realtime metadata", async () => {
     const { baseUrl } = await createTestServer();
 
     const response = await fetch(`${baseUrl}/bootstrap`).then((result) => result.json());
@@ -203,8 +174,7 @@ describe("sync-node api", () => {
     expect(response.defaultCandidateUrl).toBe("http://192.168.0.10:4110");
     expect(response.candidates).toHaveLength(2);
     expect(response.candidates[1].interfaceName).toBe("Wi-Fi");
-    expect(response.realtime.signalingWebSocketUrl).toMatch(/^ws:\/\/127\.0\.0\.1:/);
-    expect(response.realtime.iceServers).toEqual([]);
+    expect(response.realtime).toBeUndefined();
   });
 
   it("isolates envelopes by key epoch and suppresses duplicate pushes", async () => {
@@ -448,113 +418,5 @@ describe("sync-node api", () => {
     const consumedBody = await consumed.json();
     expect([404, 409]).toContain(consumed.status);
     expect(["PAIRING_NOT_FOUND", "PAIRING_EXPIRED"]).toContain(consumedBody.error.code);
-  });
-
-  it("routes realtime presence, peer events, and encrypted signaling within the same epoch", async () => {
-    const { realtimeUrl } = await createTestServer();
-    const first = await openRealtimeSocket(realtimeUrl);
-    const second = await openRealtimeSocket(realtimeUrl);
-
-    first.send(
-      JSON.stringify({
-        type: "presence.register",
-        userId: "u_test",
-        keyEpoch: 1,
-        deviceId: "d_a",
-        deviceName: "Device A",
-      }),
-    );
-    const firstSnapshot = await receiveRealtimeMessage(first);
-    expect(firstSnapshot.type).toBe("presence.snapshot");
-    expect(firstSnapshot.peers).toEqual([]);
-
-    second.send(
-      JSON.stringify({
-        type: "presence.register",
-        userId: "u_test",
-        keyEpoch: 1,
-        deviceId: "d_b",
-        deviceName: "Device B",
-      }),
-    );
-    const secondSnapshot = await receiveRealtimeMessage(second);
-    const firstPeerJoined = await receiveRealtimeMessage(first);
-
-    expect(secondSnapshot.type).toBe("presence.snapshot");
-    expect(secondSnapshot.peers).toHaveLength(1);
-    expect(firstPeerJoined.type).toBe("peer.joined");
-
-    const encryptedPayload = {
-      version: 1,
-      kind: "offer",
-      fromDeviceId: "d_a",
-      toDeviceId: "d_b",
-      nonce: Buffer.from("nonce:offer").toString("base64"),
-      cipherText: Buffer.from("cipher:offer").toString("base64"),
-      aad: Buffer.from("aad:offer").toString("base64"),
-      createdAt: "2026-05-01T10:00:00.000Z",
-    };
-
-    first.send(
-      JSON.stringify({
-        type: "signal.forward",
-        userId: "u_test",
-        keyEpoch: 1,
-        fromDeviceId: "d_a",
-        toDeviceId: "d_b",
-        payload: encryptedPayload,
-      }),
-    );
-    const delivered = await receiveRealtimeMessage(second);
-    expect(delivered.type).toBe("signal.deliver");
-    expect(delivered.payload).toEqual(encryptedPayload);
-
-    second.close();
-    const peerLeft = await receiveRealtimeMessage(first);
-    expect(peerLeft.type).toBe("peer.left");
-    expect(peerLeft.deviceId).toBe("d_b");
-
-    first.close();
-  });
-
-  it("emits relay hints to online peers in the same group and epoch", async () => {
-    const { baseUrl, realtimeUrl } = await createTestServer();
-    const listener = await openRealtimeSocket(realtimeUrl);
-    listener.send(
-      JSON.stringify({
-        type: "presence.register",
-        userId: "u_test",
-        keyEpoch: 1,
-        deviceId: "d_listener",
-        deviceName: "Listener",
-      }),
-    );
-    await receiveRealtimeMessage(listener);
-
-    await register(baseUrl, "d_source", 1);
-    const hintPromise = receiveRealtimeMessage(listener);
-    await fetch(`${baseUrl}/push`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: "u_test",
-        keyEpoch: 1,
-        deviceId: "d_source",
-        envelopes: [
-          createEnvelope({
-            senderDeviceId: "d_source",
-            recipientUserId: "u_test",
-            keyEpoch: 1,
-            seed: "relay-hint",
-          }),
-        ],
-      }),
-    });
-
-    const hint = await hintPromise;
-    expect(hint.type).toBe("relay.hint");
-    expect(hint.fromDeviceId).toBe("d_source");
-
-    listener.close();
   });
 });
