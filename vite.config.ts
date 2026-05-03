@@ -251,44 +251,6 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (!id.includes("node_modules")) {
-            return undefined;
-          }
-
-          if (
-            id.includes("/react/") ||
-            id.includes("\\react\\") ||
-            id.includes("react-dom") ||
-            id.includes("scheduler") ||
-            id.includes("wouter")
-          ) {
-            return "vendor-react";
-          }
-
-          if (
-            id.includes("framer-motion") ||
-            id.includes("lucide-react") ||
-            id.includes("@radix-ui")
-          ) {
-            return "vendor-ui";
-          }
-
-          if (
-            id.includes("sonner") ||
-            id.includes("qrcode.react") ||
-            id.includes("dexie") ||
-            id.includes("zod")
-          ) {
-            return "vendor-app";
-          }
-
-          return "vendor";
-        },
-      },
-    },
   },
   server: {
     port: 3000,
