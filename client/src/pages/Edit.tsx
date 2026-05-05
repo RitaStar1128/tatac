@@ -153,7 +153,7 @@ export default function Edit() {
 
   return (
     <div className="h-[100dvh] flex flex-col bg-background text-foreground overflow-hidden">
-      <header className="flex items-center justify-between px-4 py-3 border-b-2 border-foreground shrink-0 z-10 bg-foreground text-background transition-colors duration-300">
+      <header className="flex shrink-0 items-center justify-between border-b-2 border-foreground bg-foreground px-4 py-3 text-background">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -168,12 +168,12 @@ export default function Edit() {
             }}
             aria-label={copy.backAria}
             title={copy.backAria}
-            className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors"
+            className="h-10 w-10 rounded-full text-background hover:bg-background/20 hover:text-background"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="h-6 w-6" strokeWidth={2.5} />
           </Button>
           <div>
-            <h1 className="font-black text-lg tracking-tight uppercase">{t("editMode")}</h1>
+            <h1 className="text-lg font-black uppercase tracking-tight">{t("editMode")}</h1>
             {originalRecord && (
               <p className="text-xs uppercase tracking-[0.25em] text-background/70">{originalRecord.title}</p>
             )}
@@ -190,9 +190,9 @@ export default function Edit() {
             disabled={!canSave}
             aria-label={copy.saveAria}
             title={copy.saveAria}
-            className="rounded-none hover:bg-background/20 text-background hover:text-background transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="h-10 w-10 rounded-full text-background hover:bg-background/20 hover:text-background disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Save className="w-5 h-5" />
+            <Save className="h-5 w-5" />
           </Button>
         )}
       </header>

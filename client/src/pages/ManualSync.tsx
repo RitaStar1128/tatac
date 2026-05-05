@@ -343,9 +343,9 @@ export default function ManualSyncPage() {
             onClick={() => setLocation("/sync-settings")}
             aria-label={labels.back}
             title={labels.back}
-            className="rounded-full border border-border hover:bg-muted"
+            className="mr-2 h-10 w-10 rounded-full hover:bg-accent hover:text-accent-foreground"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-6 w-6" strokeWidth={2.5} />
           </Button>
           <div>
             <h1 className="text-lg font-black uppercase tracking-tight">{labels.title}</h1>

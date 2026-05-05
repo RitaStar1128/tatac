@@ -285,63 +285,67 @@ export default function HistoryPage() {
       exit={{ opacity: 0, x: -20 }}
       className="min-h-screen flex flex-col bg-background text-foreground font-sans"
     >
-      <header className="flex items-center justify-between px-4 py-3 border-b-2 border-border bg-background sticky top-0 z-10">
-        <div className="flex items-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => setLocation("/")}
-            aria-label={copy.backAria}
-            title={copy.backAria}
-            className="mr-2 w-10 h-10 rounded-full hover:bg-accent hover:text-accent-foreground transition-all active:translate-x-[-2px]"
-          >
-            <ArrowLeft className="w-6 h-6" strokeWidth={2.5} />
-          </Button>
-          <h1 className="text-lg font-black tracking-tighter uppercase">{t("history")}</h1>
-        </div>
-
-        <div className="flex items-center gap-1">
-          {records.length > 0 && (
+      <header className="sticky top-0 z-20 border-b-2 border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex max-w-md items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center">
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setIsExportOpen(true)}
-              aria-label={copy.exportAria}
-              title={copy.exportAria}
-              className="rounded-none hover:bg-muted transition-colors"
+              onClick={() => setLocation("/")}
+              aria-label={copy.backAria}
+              title={copy.backAria}
+              className="mr-2 h-10 w-10 rounded-full hover:bg-accent hover:text-accent-foreground"
             >
-              <Download className="w-5 h-5" />
+              <ArrowLeft className="h-6 w-6" strokeWidth={2.5} />
             </Button>
-          )}
+            <h1 className="text-lg font-black uppercase tracking-tighter">{t("history")}</h1>
+          </div>
+
+          <div className="flex items-center gap-1">
+            {records.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsExportOpen(true)}
+                aria-label={copy.exportAria}
+                title={copy.exportAria}
+                className="rounded-none hover:bg-muted"
+              >
+                <Download className="h-5 w-5" />
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
-      <div className="px-4 py-3 border-b border-border bg-muted/20 text-xs text-muted-foreground">
-        {copy.helper}
+      <div className="border-b border-border bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+        <div className="mx-auto max-w-md">{copy.helper}</div>
       </div>
 
-      <div className="px-4 py-3 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 sticky top-[100px] z-10">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder={t("searchPlaceholder")}
-            aria-label={copy.searchAria}
-            className="pl-9 pr-9 h-10 rounded-none border-border focus-visible:ring-1 focus-visible:ring-foreground bg-muted/30"
-          />
-          {searchQuery && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSearchQuery("")}
-              aria-label={language === "ja" ? "検索をクリア" : "Clear search"}
-              title={language === "ja" ? "検索をクリア" : "Clear search"}
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 hover:bg-transparent text-muted-foreground hover:text-foreground"
-            >
-              <X className="w-4 h-4" />
-            </Button>
-          )}
+      <div className="sticky top-[57px] z-10 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto max-w-md">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t("searchPlaceholder")}
+              aria-label={copy.searchAria}
+              className="h-10 rounded-none border-border bg-muted/30 pl-9 pr-9 focus-visible:ring-1 focus-visible:ring-foreground"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSearchQuery("")}
+                aria-label={language === "ja" ? "検索をクリア" : "Clear search"}
+                title={language === "ja" ? "検索をクリア" : "Clear search"}
+                className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 text-muted-foreground hover:bg-transparent hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 

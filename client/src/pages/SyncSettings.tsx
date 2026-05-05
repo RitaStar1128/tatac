@@ -479,16 +479,18 @@ export default function SyncSettingsPage() {
           >
             <ArrowLeft className="h-6 w-6" strokeWidth={2.5} />
           </Button>
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-black tracking-tighter uppercase">{copy.title}</h1>
-            {syncEnabled && nodeReachable !== null && (
-              <span
-                className={`h-2 w-2 rounded-full ${nodeReachable ? "bg-green-500" : "bg-muted-foreground"}`}
-                title={nodeReachable ? "Sync node reachable" : "Sync node unreachable"}
-              />
-            )}
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-black uppercase tracking-tighter">{copy.title}</h1>
+              {syncEnabled && nodeReachable !== null && (
+                <span
+                  className={`h-2 w-2 rounded-full ${nodeReachable ? "bg-green-500" : "bg-muted-foreground"}`}
+                  title={nodeReachable ? "Sync node reachable" : "Sync node unreachable"}
+                />
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">{copy.subtitle}</p>
           </div>
-          <p className="text-xs text-muted-foreground">{copy.subtitle}</p>
         </div>
       </header>
 
