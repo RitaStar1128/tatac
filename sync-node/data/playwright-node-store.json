@@ -1,0 +1,74 @@
+{
+  "nodeId": "node_playwright",
+  "users": {
+    "u_local_d24f4a3bcc8a": {
+      "devices": {
+        "d_24f4a3bc-c8ac-4fca-8a91-5b84fc4c9cde": {
+          "deviceId": "d_24f4a3bc-c8ac-4fca-8a91-5b84fc4c9cde",
+          "deviceName": "TATAC Windows",
+          "clientVersion": "0.1.0",
+          "registeredAt": "2026-05-07T22:29:58.467Z",
+          "lastSeenAt": "2026-05-07T22:30:07.955Z"
+        },
+        "d_9c30b08d-12e3-4bf1-b0c5-7e37c6291908": {
+          "deviceId": "d_9c30b08d-12e3-4bf1-b0c5-7e37c6291908",
+          "deviceName": "TATAC Windows",
+          "clientVersion": "0.1.0",
+          "registeredAt": "2026-05-07T22:30:01.157Z",
+          "lastSeenAt": "2026-05-07T22:30:08.297Z"
+        }
+      },
+      "epochs": {
+        "1": {
+          "nextSeq": 1,
+          "items": [
+            {
+              "seq": 1,
+              "envelope": {
+                "envelopeVersion": 1,
+                "senderDeviceId": "d_24f4a3bc-c8ac-4fca-8a91-5b84fc4c9cde",
+                "recipientUserId": "u_local_d24f4a3bcc8a",
+                "keyEpoch": 1,
+                "contentHash": "GS75Q/lJ2Wiht4J/B+kRs/NplY6lPiaZt05Ws8x0E4g=",
+                "nonce": "UHiqs5oW5r4wDl/F",
+                "cipherText": "rAucNNIFJ/TdumPnkEOIb8LEo0ILsaXW/t0Xr6rLOPRp9/MkF4EAX6eRT8z/bVIGox+uTXBi04TThDRPUXLuODNf7ERGSDxX+xsivX9HCy38thUMJnX14T+vQsBn3pOowEV9NMA5rmIbSqOqA8kFGwtfs8Ky7yuYbMFfHTgpkMkYzKBdirPqomTVy9FRndlFQAqQJ7hVSzBNm54ZX4TKeZ4jt1SP2d6b9uD7v4wYkz/nFmCWFxL6kibQs+uDQyNdZ5wqdOeHFtgJzZ10Z6iTeU073SgDW0siZBz365AkqT3JWcBCzM9Ymuw2Ik80B3DtV72UtmIKMOu1qUQbrf10RHnnUoUsKpnPQZA79jJD7FX/jolhwEsIkdPLaAwfXzWDeA9HrJgwhrmYyG9rTZkOyZCUCkaRKKLXyIpLjere211H+sam98U4dBFlh4M/OQOV9gX4r1CAMjBp6F37ddwsOoZ+tKgJ0ektqRNK9U2Nyel0osOeEdriWuGp+NNQbd0CFZccD2rjC853Z2o6MQc1o6zYmC33kGAh5gLkt1ESl1DG89vvwj3I9OZXZU4A3Pw/YJEQfM+d2GMpNsoCHPHwL34Y0XcWdFRERq7jTbMaHzclG9bMHZM=",
+                "aad": "eyJlbnZlbG9wZVZlcnNpb24iOjEsInNlbmRlckRldmljZUlkIjoiZF8yNGY0YTNiYy1jOGFjLTRmY2EtOGE5MS01Yjg0ZmM0YzljZGUiLCJyZWNpcGllbnRVc2VySWQiOiJ1X2xvY2FsX2QyNGY0YTNiY2M4YSIsImtleUVwb2NoIjoxLCJjb250ZW50SGFzaCI6IkdTNzVRL2xKMldpaHQ0Si9CK2tScy9OcGxZNmxQaWFadDA1V3M4eDBFNGc9IiwiY3JlYXRlZEF0IjoiMjAyNi0wNS0wN1QyMjozMDowNC4yMjFaIn0=",
+                "createdAt": "2026-05-07T22:30:04.221Z"
+              }
+            }
+          ],
+          "contentHashes": {
+            "GS75Q/lJ2Wiht4J/B+kRs/NplY6lPiaZt05Ws8x0E4g=": 1
+          },
+          "deviceStates": {
+            "d_24f4a3bc-c8ac-4fca-8a91-5b84fc4c9cde": {
+              "lastPulledSeq": 1,
+              "updatedAt": "2026-05-07T22:30:07.955Z"
+            },
+            "d_9c30b08d-12e3-4bf1-b0c5-7e37c6291908": {
+              "lastPulledSeq": 1,
+              "updatedAt": "2026-05-07T22:30:08.292Z"
+            }
+          }
+        }
+      }
+    }
+  },
+  "pairingSessions": {
+    "ps_ca4ec81d-98d0-48d3-bf7e-270e0c00b443": {
+      "sessionId": "ps_ca4ec81d-98d0-48d3-bf7e-270e0c00b443",
+      "pairingKeyHash": "Y1FGB_lmGjaYdV_yeyNS4_qUp9IlruLswcKRavWigcY",
+      "bundle": {
+        "pairingVersion": 1,
+        "nonce": "+ZJCy1kEB11rH2DV",
+        "cipherText": "M19lOtxHHmJhuP8VuM9aPmh2XpMAiOSzVLFiCJeDZGuBBhxpbXuop4B4CQeHOih/MAv9q76yfih2uty6yGEXLLaeraNRKdev0V8bkhchH/Lsq3hVt65sZ02mZdvvmFNf9npliWlVrJ+vg7E5d7gqXGEvcRNbpDw0NQ4GhVaJvpyAdokkNfq3kvaYiwwQr/rwp+aYzCz2VXLm0SKqRpojrK9kahCm16Cq0XVyUhkww8gVCyjH+v/3nyjQ40m3sa6NuPtOGRqv6+c8b9Bx+51cIYwiFApAO1semJVBe7KMIO7xwMqafR3atTWPhE1xOLqI6tXaxDD0L1nVDb+W1uXhpQSRVQdepLtbURaOIz5ps1iZvFkYqbi7F3T7qq7gf2obUjotLAFea5/qh3OwEqhnEleww5O1VXmqmuYH8fgYe8c7ComhXpXk9RYvIahdr1OZBzFSzHtcXUeiL4Nqhd92Bj5X4THaeSxSJRGcmWuUFNbVKmXrSagGUyeP",
+        "aad": "eyJwYWlyaW5nVmVyc2lvbiI6MSwiY3JlYXRlZEF0IjoiMjAyNi0wNS0wN1QyMjozMDowMC4yOTJaIiwiZXhwaXJlc0F0IjoiMjAyNi0wNS0wN1QyMjo0MDowMC4yOTJaIn0=",
+        "createdAt": "2026-05-07T22:30:00.292Z",
+        "expiresAt": "2026-05-07T22:40:00.292Z"
+      },
+      "createdAt": "2026-05-07T22:30:00.295Z",
+      "expiresAt": "2026-05-07T22:40:00.292Z",
+      "consumedAt": "2026-05-07T22:30:01.140Z"
+    }
+  }
+}

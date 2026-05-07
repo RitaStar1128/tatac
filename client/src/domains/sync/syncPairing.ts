@@ -4,7 +4,7 @@ import type { PairingBundlePayload, SyncNodeCandidate } from "@shared/contracts"
 import { clearLocalNotesAndOps, getLocalSyncDataSummary, type LocalSyncDataSummary } from "@/domains/notes/noteRepository";
 
 import { getOrCreateSyncConfig, replaceSyncGroupSettings, saveSyncSettingsDraft } from "./syncSettingsStore";
-import { assertSyncEnvironmentSupported } from "./syncEnvironment";
+import { assertSyncEnvironmentSupported, getSyncEnvironmentSupport } from "./syncEnvironment";
 import {
   clearPersistedSyncSecret,
   getPersistedSyncSecret,
@@ -16,7 +16,8 @@ import { createPairingKey, createPairingKeyHash, decryptPairingBundle, encryptPa
 import { clearAllSyncCursors } from "./syncCursorStore";
 import { consumePairingSession, createPairingSession, fetchBootstrap } from "./syncTransport";
 
-const DEFAULT_BOOTSTRAP_URL = "http://127.0.0.1:4010";
+const DEFAULT_BOOTSTRAP_URLS = ["http://127.0.0.1:4010", "http://127.0.0.1:4110"] as const;
+const DEFAULT_BOOTSTRAP_URL = DEFAULT_BOOTSTRAP_URLS[0];
 const DEFAULT_PAIRING_TTL_MS = 10 * 60 * 1000;
 const PRODUCTION_PAIRING_APP_URL = "https://tatac.vercel.app/sync-pair";
 const textEncoder = new TextEncoder();
@@ -44,12 +45,60 @@ function encodeStringAsBase64Url(value: string): string {
   return encodeBase64Url(textEncoder.encode(value));
 }
 
+function getBootstrapTargets(preferredBootstrapUrl?: string): string[] {
+  const targets = new Set<string>();
+  const normalizedPreferredBootstrapUrl = preferredBootstrapUrl?.trim();
+
+  if (normalizedPreferredBootstrapUrl) {
+    targets.add(normalizedPreferredBootstrapUrl);
+  }
+
+  for (const defaultBootstrapUrl of DEFAULT_BOOTSTRAP_URLS) {
+    targets.add(defaultBootstrapUrl);
+  }
+
+  return Array.from(targets);
+}
+
+async function fetchFirstReachableBootstrap(preferredBootstrapUrl?: string): Promise<{
+  bootstrapTarget: string;
+  bootstrap: Awaited<ReturnType<typeof fetchBootstrap>>;
+}> {
+  let lastError: unknown;
+
+  for (const bootstrapTarget of getBootstrapTargets(preferredBootstrapUrl)) {
+    const support = getSyncEnvironmentSupport(bootstrapTarget);
+    if (!support.supported) {
+      lastError = new Error(
+        "This hosted HTTPS app cannot enable LAN sync. Open TATAC from a local HTTP URL on the PC first.",
+      );
+      continue;
+    }
+
+    try {
+      const bootstrap = await fetchBootstrap(bootstrapTarget);
+      return {
+        bootstrapTarget,
+        bootstrap,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("Could not reach the local sync node on this device.");
+}
+
 export interface EnableSyncResult {
   config: Awaited<ReturnType<typeof getOrCreateSyncConfig>>;
   nodeId: string;
   serverTime: string;
   candidateUrls: string[];
   candidates: SyncNodeCandidate[];
+  needsCandidateSelection: boolean;
+  selectedSyncNodeUrl: string | null;
 }
 
 export interface PairingSessionResult {
@@ -69,6 +118,12 @@ export interface PairingConsumeResult {
   sourceDeviceName: string;
   sourceDeviceId: string;
   syncResult: SyncRunResult;
+}
+
+export interface LocalSyncHostCapability {
+  supported: boolean;
+  canEnableOnThisDevice: boolean;
+  reason: "ok" | "unsupported-environment" | "localhost-node-unreachable";
 }
 
 export class PairingJoinBlockedError extends Error {
@@ -95,11 +150,10 @@ function hasForeignLocalGroup(summary: LocalSyncDataSummary, targetGroupId: stri
 export async function enableSyncOnThisDevice(input?: {
   preferredBootstrapUrl?: string;
 }): Promise<EnableSyncResult> {
-  assertSyncEnvironmentSupported();
-  const bootstrapTarget = input?.preferredBootstrapUrl?.trim() || DEFAULT_BOOTSTRAP_URL;
+  const bootstrapResult = await fetchFirstReachableBootstrap(input?.preferredBootstrapUrl);
   const [config, bootstrap, persistedSecret] = await Promise.all([
     getOrCreateSyncConfig(),
-    fetchBootstrap(bootstrapTarget),
+    Promise.resolve(bootstrapResult.bootstrap),
     getPersistedSyncSecret(),
   ]);
 
@@ -110,32 +164,82 @@ export async function enableSyncOnThisDevice(input?: {
   });
   setSyncSessionSecret({ passphrase: groupSecret });
 
-  const updatedConfig = await saveSyncSettingsDraft({
-    userId: config.userId,
-    keyEpoch: config.keyEpoch,
-    deviceName: config.deviceName,
-    syncNodeUrl: bootstrap.defaultCandidateUrl,
-    salt: config.salt,
-  });
+  if (bootstrap.candidates.length === 1) {
+    const updatedConfig = await commitSelectedSyncNodeUrl(bootstrap.defaultCandidateUrl);
+    return {
+      config: updatedConfig,
+      nodeId: bootstrap.nodeId,
+      serverTime: bootstrap.serverTime,
+      candidateUrls: bootstrap.candidateUrls,
+      candidates: bootstrap.candidates,
+      needsCandidateSelection: false,
+      selectedSyncNodeUrl: updatedConfig.syncNodeUrl,
+    };
+  }
 
   return {
-    config: updatedConfig,
+    config,
     nodeId: bootstrap.nodeId,
     serverTime: bootstrap.serverTime,
     candidateUrls: bootstrap.candidateUrls,
     candidates: bootstrap.candidates,
+    needsCandidateSelection: true,
+    selectedSyncNodeUrl: null,
   };
+}
+
+export async function probeLocalSyncHost(input?: {
+  preferredBootstrapUrl?: string;
+}): Promise<LocalSyncHostCapability> {
+  const supportsAnyBootstrapTarget = getBootstrapTargets(input?.preferredBootstrapUrl).some(
+    (bootstrapTarget) => getSyncEnvironmentSupport(bootstrapTarget).supported,
+  );
+  if (!supportsAnyBootstrapTarget) {
+    return {
+      supported: false,
+      canEnableOnThisDevice: false,
+      reason: "unsupported-environment",
+    };
+  }
+
+  try {
+    await fetchFirstReachableBootstrap(input?.preferredBootstrapUrl);
+    return {
+      supported: true,
+      canEnableOnThisDevice: true,
+      reason: "ok",
+    };
+  } catch {
+    return {
+      supported: true,
+      canEnableOnThisDevice: false,
+      reason: "localhost-node-unreachable",
+    };
+  }
+}
+
+export async function commitSelectedSyncNodeUrl(syncNodeUrl: string): Promise<Awaited<ReturnType<typeof getOrCreateSyncConfig>>> {
+  const normalizedSyncNodeUrl = syncNodeUrl.trim();
+  assertSyncEnvironmentSupported(normalizedSyncNodeUrl);
+  const config = await getOrCreateSyncConfig();
+  return saveSyncSettingsDraft({
+    userId: config.userId,
+    keyEpoch: config.keyEpoch,
+    deviceName: config.deviceName,
+    syncNodeUrl: normalizedSyncNodeUrl,
+    salt: config.salt,
+  });
 }
 
 export async function createPairingSessionForMobile(input?: {
   syncNodeUrlOverride?: string;
 }): Promise<PairingSessionResult> {
-  assertSyncEnvironmentSupported();
   const config = await getOrCreateSyncConfig();
   const selectedNodeUrl = input?.syncNodeUrlOverride?.trim() || config.syncNodeUrl;
   if (!selectedNodeUrl) {
     throw new Error("Enable sync on this PC before adding another device.");
   }
+  assertSyncEnvironmentSupported(selectedNodeUrl);
 
   const persistedSecret = await getPersistedSyncSecret();
   const groupSecret = persistedSecret?.groupSecret ?? getSyncSessionSecret()?.passphrase;

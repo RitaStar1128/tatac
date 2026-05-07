@@ -68,7 +68,8 @@ async function resolveSyncAvailability(): Promise<{
   enabled: boolean;
   lastSyncedAt: string | null;
 }> {
-  const environment = getSyncEnvironmentSupport();
+  const [config, secret] = await Promise.all([getOrCreateSyncConfig(), getPersistedSyncSecret()]);
+  const environment = getSyncEnvironmentSupport(config.syncNodeUrl);
   if (!environment.supported) {
     return {
       enabled: false,
@@ -76,7 +77,6 @@ async function resolveSyncAvailability(): Promise<{
     };
   }
 
-  const [config, secret] = await Promise.all([getOrCreateSyncConfig(), getPersistedSyncSecret()]);
   return {
     enabled: Boolean(config.syncNodeUrl && secret?.groupSecret),
     lastSyncedAt: config.lastSuccessfulSyncAt ?? null,
@@ -247,48 +247,56 @@ class SyncScheduler {
     this.inFlight = (async () => {
       let lastError: unknown;
 
-      for (let attempt = 0; attempt < MAX_SYNC_ATTEMPTS; attempt++) {
-        try {
-          const result = await syncWithNode();
-          this.stopHealthPoll();
-          setState((current) => ({
-            ...current,
-            enabled: true,
-            status: "idle",
-            lastSyncedAt: result.completedAt,
-            lastError: null,
-            lastRun: result,
-            retriesRemaining: undefined,
-          }));
-          return;
-        } catch (error) {
-          lastError = error;
+      try {
+        for (let attempt = 0; attempt < MAX_SYNC_ATTEMPTS; attempt++) {
+          try {
+            const result = await syncWithNode();
+            this.stopHealthPoll();
+            setState((current) => ({
+              ...current,
+              enabled: true,
+              status: "idle",
+              lastSyncedAt: result.completedAt,
+              lastError: null,
+              lastRun: result,
+              retriesRemaining: undefined,
+            }));
+            return;
+          } catch (error) {
+            lastError = error;
 
-          const isLastAttempt = attempt === MAX_SYNC_ATTEMPTS - 1;
-          if (isNonRetryableError(error) || isLastAttempt) {
-            break;
+            const isLastAttempt = attempt === MAX_SYNC_ATTEMPTS - 1;
+            if (isNonRetryableError(error) || isLastAttempt) {
+              break;
+            }
+
+            const backoffMs = RETRY_BACKOFF_MS[attempt] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1];
+            setState((current) => ({
+              ...current,
+              enabled: true,
+              status: "retrying",
+              lastError: null,
+              retriesRemaining: MAX_SYNC_ATTEMPTS - attempt - 1,
+            }));
+            await new Promise<void>((resolve) => setTimeout(resolve, addJitter(backoffMs)));
           }
+        }
 
-          const backoffMs = RETRY_BACKOFF_MS[attempt] ?? RETRY_BACKOFF_MS[RETRY_BACKOFF_MS.length - 1];
-          setState((current) => ({
-            ...current,
-            enabled: true,
-            status: "retrying",
-            lastError: null,
-            retriesRemaining: MAX_SYNC_ATTEMPTS - attempt - 1,
-          }));
-          await new Promise<void>((resolve) => setTimeout(resolve, addJitter(backoffMs)));
+        setState((current) => ({
+          ...current,
+          enabled: true,
+          status: "error",
+          lastError: getFriendlySyncError(lastError),
+          retriesRemaining: undefined,
+        }));
+        this.startHealthPoll();
+      } finally {
+        this.inFlight = null;
+        if (this.rerunRequested) {
+          this.rerunRequested = false;
+          void this.run();
         }
       }
-
-      setState((current) => ({
-        ...current,
-        enabled: true,
-        status: "error",
-        lastError: getFriendlySyncError(lastError),
-        retriesRemaining: undefined,
-      }));
-      this.startHealthPoll();
     })();
 
     await this.inFlight;
